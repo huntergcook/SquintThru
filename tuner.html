@@ -85,6 +85,13 @@
   ul.log { list-style: none; margin: 0; padding: 0; font: 14px/1.6 ui-monospace, monospace; color: var(--dim); }
   details summary { cursor: pointer; color: var(--dim); font-size: 14px; }
   .error { color: var(--warn); font-weight: 600; }
+  .header-btn { padding: 8px 14px; font-size: 15px; font-weight: 600; }
+  .header-btn.on { background: var(--on); border-color: var(--on); color: #fff; }
+  .notice { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 14px;
+            padding: 12px 14px; border-radius: 12px; font-weight: 600;
+            border: 1px solid var(--warn); background: color-mix(in srgb, var(--warn) 14%, var(--panel)); }
+  .notice span { flex: 1; min-width: 200px; }
+  .notice[hidden] { display: none; }
   /* The headset's compositor hides the system mouse cursor, so the page draws its own. */
   #cursor { position: fixed; left: 0; top: 0; width: 18px; height: 18px; margin: -9px 0 0 -9px;
             border-radius: 50%; border: 3px solid #fff; background: var(--accent);
@@ -97,9 +104,12 @@
     <h1>SquintThru</h1>
     <label class="switch"><input type="checkbox" id="enabled"> On</label>
     <span class="chip" id="squintChip">Not squinting</span>
-    <span class="chip" id="ptChip">Passthrough …</span>
     <span class="chip" id="speedChip" title="Time from squint detected to Steam switching Room View">– ms</span>
+    <button class="btn header-btn" id="flip">Turn passthrough on</button>
   </header>
+  <div class="notice" id="ptWarn" hidden>
+    <span>Passthrough is already on, so squinting won't do anything. Turn it off with the green button above to start using SquintThru.</span>
+  </div>
   <p class="error" id="err" hidden>SquintThru isn't running. Open it from your app menu, or run <code>squintthru start</code>.</p>
   <p class="error" id="problem" hidden></p>
 
@@ -169,7 +179,6 @@
       <span class="hint" style="margin:0">Stops the start of a normal blink from flashing passthrough. Turn off if real squints get missed.</span>
     </div>
     <div class="buttons" style="margin-top:14px">
-      <button class="btn" id="flip">Switch passthrough now</button>
       <button class="btn" id="reset">Reset to defaults</button>
     </div>
   </section>
@@ -362,8 +371,10 @@ function render(live) {
   $("squintChip").textContent = live.squinting ? "Squinting" : "Not squinting";
   $("squintChip").classList.toggle("active", live.squinting);
   const p = live.passthrough;
-  $("ptChip").textContent = p === null ? "Passthrough ?" : "Passthrough " + p;
-  $("ptChip").classList.toggle("on", p === "on");
+  // Hold mode never turns off passthrough it didn't turn on, so a squint does nothing while it's on.
+  $("ptWarn").hidden = !(p === "on" && !live.ours && !live.squinting && settings.mode === "hold");
+  $("flip").textContent = p === null ? "Passthrough ?" : p === "on" ? "Turn passthrough off" : "Turn passthrough on";
+  $("flip").classList.toggle("on", p === "on");
   $("speedChip").textContent = live.latency_ms == null ? "– ms" : live.latency_ms + " ms";
   $("problem").hidden = !live.problem;
   $("problem").textContent = live.problem || "";

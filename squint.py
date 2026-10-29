@@ -71,7 +71,7 @@ def save_settings():
 
 settings = load_settings()
 live = {"l": 0.0, "r": 0.0, "squinting": False, "passthrough": None, "latency_ms": None,
-        "eyes": False, "problem": ""}
+        "eyes": False, "problem": "", "ours": False}
 events = deque(maxlen=12)
 calib = {"phase": None, "start": 0.0, "until": 0.0, "samples": {"open": [], "squint": []}, "message": ""}
 
@@ -143,6 +143,7 @@ class Passthrough:
                         live["latency_ms"] = round((time.monotonic() - asked) * 1000, 1)
                 if state:
                     live["passthrough"] = state
+                live["ours"] = self.ours   # False while on means someone else turned it on
                 if self.problem:
                     log("Steam connection back")
                 self.problem = live["problem"] = None
@@ -303,7 +304,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass  # the page closed or reloaded mid-poll
 
     def _trusted(self):
         # Only this machine's own pages: blocks other websites (DNS rebinding) from poking the API.

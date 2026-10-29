@@ -99,4 +99,5 @@ Run `squintthru log`, or check the red message in the app.
 - **"Steam debug port 8080 isn't open"**: restart Steam after installing, or see [Steam debugging](#steam-debugging).
 - **"SteamVR dashboard bar not found"**: start SteamVR. SquintThru keeps retrying.
 - **"waiting for eye tracking"**: eye tracking isn't running yet. SquintThru connects as soon as it is.
+- **Squinting does nothing**: in Hold mode, SquintThru only turns off passthrough it turned on itself, so if passthrough was already on, squints are ignored. The app shows a warning when this happens. Turn passthrough off with the button at the top.
 - **Passthrough flashes when you blink**: make sure **Ignore blinks** is on, or raise **Band from** on your other eye.
