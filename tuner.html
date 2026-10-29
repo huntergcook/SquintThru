@@ -194,7 +194,7 @@ document.documentElement.addEventListener("pointerleave", () => { cursor.style.d
 const TIMING = [
   ["hold", "Squint for", 0, 0.1, 0.001, "How long to squint before passthrough turns on. 0 is fastest: it acts on the first eye frame.", "ms"],
   ["release_hold", "Open for", 0, 0.1, 0.001, "How long your eye must be open again before it turns off. 0 is fastest.", "ms"],
-  ["min_on", "Stay on at least", 0.02, 0.2, 0.01, "Stops flicker when you squint again quickly."],
+  ["min_on", "Stay on at least", 0, 0.2, 0.001, "Stops flicker when you squint again quickly. 0 turns it off as soon as your eye opens.", "ms"],
 ];
 const WINK = [
   ["wink_max", "Longest wink", 0.1, 1, 0.05, "A wink longer than this doesn't count.", "s"],
@@ -321,7 +321,7 @@ function render(live) {
   if (!settings) return;
   for (const [k, , , , , , unit] of SLIDERS) {
     if (document.activeElement !== $("s_" + k)) $("s_" + k).value = settings[k];
-    $("o_" + k).textContent = unit === "ms" ? (settings[k] ? Math.round(settings[k] * 1000) + " ms" : "Instant")
+    $("o_" + k).textContent = unit === "ms" ? (settings[k] || k === "min_on" ? Math.round(settings[k] * 1000) + " ms" : "Instant")
       : Number(settings[k]).toFixed(2) + (unit ? " " + unit : "");
   }
   $("enabled").checked = settings.enabled;
