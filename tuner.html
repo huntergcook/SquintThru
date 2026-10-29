@@ -3,7 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Squint Tuner</title>
+<title>SquintThru</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#2f6fde">
 <style>
   :root {
     --bg: #f4f5f7; --panel: #ffffff; --text: #16181d; --dim: #646a76; --line: #dde0e6;
@@ -91,12 +94,14 @@
 <body>
 <main>
   <header>
-    <h1>Squint Passthrough</h1>
+    <h1>SquintThru</h1>
     <label class="switch"><input type="checkbox" id="enabled"> On</label>
     <span class="chip" id="squintChip">Not squinting</span>
     <span class="chip" id="ptChip">Passthrough …</span>
+    <span class="chip" id="speedChip" title="Time from squint detected to Steam switching Room View">– ms</span>
   </header>
-  <p class="error" id="err" hidden>Lost connection to the squint script.</p>
+  <p class="error" id="err" hidden>SquintThru isn't running. Open it from your app menu, or run <code>squintthru start</code>.</p>
+  <p class="error" id="problem" hidden></p>
 
   <section id="calib">
     <h2>Calibrate</h2>
@@ -155,6 +160,14 @@
         <button data-v="left">Left</button><button data-v="right">Right</button>
       </div>
     </div>
+    <div class="row">
+      <label class="switch"><input type="checkbox" id="click_sound"> Click sound</label>
+      <span class="hint" style="margin:0">Play Steam's button click each time passthrough switches.</span>
+    </div>
+    <div class="row">
+      <label class="switch"><input type="checkbox" id="ignore_blinks"> Ignore blinks</label>
+      <span class="hint" style="margin:0">Stops the start of a normal blink from flashing passthrough. Turn off if real squints get missed.</span>
+    </div>
     <div class="buttons" style="margin-top:14px">
       <button class="btn" id="flip">Switch passthrough now</button>
       <button class="btn" id="reset">Reset to defaults</button>
@@ -179,8 +192,8 @@ document.documentElement.addEventListener("pointerleave", () => { cursor.style.d
 </script>
 <script>
 const TIMING = [
-  ["hold", "Squint for", 0.001, 0.1, 0.001, "How long to squint before passthrough turns on.", "ms"],
-  ["release_hold", "Open for", 0.001, 0.1, 0.001, "How long your eye must be open again before it turns off.", "ms"],
+  ["hold", "Squint for", 0, 0.1, 0.001, "How long to squint before passthrough turns on. 0 is fastest: it acts on the first eye frame.", "ms"],
+  ["release_hold", "Open for", 0, 0.1, 0.001, "How long your eye must be open again before it turns off. 0 is fastest.", "ms"],
   ["min_on", "Stay on at least", 0.02, 0.2, 0.01, "Stops flicker when you squint again quickly."],
 ];
 const WINK = [
@@ -239,7 +252,8 @@ function change(k, v) {
 }
 
 for (const [k] of SLIDERS) $("s_" + k).addEventListener("input", (e) => change(k, parseFloat(e.target.value)));
-$("double_wink").addEventListener("change", (e) => change("double_wink", e.target.checked));
+for (const k of ["double_wink", "click_sound", "ignore_blinks"])
+  $(k).addEventListener("change", (e) => change(k, e.target.checked));
 for (const e of ["l", "r"]) for (const i of [0, 1]) {
   $(`k${i}_${e}`).addEventListener("input", (ev) => {
     let v = parseFloat(ev.target.value);
@@ -307,11 +321,11 @@ function render(live) {
   if (!settings) return;
   for (const [k, , , , , , unit] of SLIDERS) {
     if (document.activeElement !== $("s_" + k)) $("s_" + k).value = settings[k];
-    $("o_" + k).textContent = unit === "ms" ? Math.round(settings[k] * 1000) + " ms"
+    $("o_" + k).textContent = unit === "ms" ? (settings[k] ? Math.round(settings[k] * 1000) + " ms" : "Instant")
       : Number(settings[k]).toFixed(2) + (unit ? " " + unit : "");
   }
   $("enabled").checked = settings.enabled;
-  $("double_wink").checked = settings.double_wink;
+  for (const k of ["double_wink", "click_sound", "ignore_blinks"]) $(k).checked = settings[k];
   $("winkBody").hidden = !settings.double_wink;
   document.querySelectorAll(".seg").forEach((seg) => seg.querySelectorAll("button").forEach((b) =>
     b.classList.toggle("sel", settings[seg.dataset.key] === b.dataset.v)));
@@ -350,6 +364,9 @@ function render(live) {
   const p = live.passthrough;
   $("ptChip").textContent = p === null ? "Passthrough ?" : "Passthrough " + p;
   $("ptChip").classList.toggle("on", p === "on");
+  $("speedChip").textContent = live.latency_ms == null ? "– ms" : live.latency_ms + " ms";
+  $("problem").hidden = !live.problem;
+  $("problem").textContent = live.problem || "";
   $("log").innerHTML = live.events.map((e) => `<li>${e.replace(/</g, "&lt;")}</li>`).join("");
   renderCalib(live.calib);
 }

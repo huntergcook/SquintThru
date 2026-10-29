@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# Installs SquintThru on the Steam Frame: a background service that starts with
+# your session, an app-menu entry, and the `squintthru` command.
+#   ./install.sh               install or update (safe to run again after git pull)
+#   ./install.sh --uninstall   remove it (your settings are kept)
+set -euo pipefail
+HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+UNIT="squintthru.service"
+UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+APPS="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+BIN="$HOME/.local/bin"
+CEF_FLAG=".cef-enable-remote-debugging"
+STEAM_DIRS=("$HOME/.local/share/Steam" "$HOME/.steam/steam")
+
+say() { printf '\033[1m%s\033[0m\n' "$*"; }
+
+if [[ "${1:-}" == "--uninstall" ]]; then
+  systemctl --user disable --now "$UNIT" 2>/dev/null || true
+  rm -f "$UNIT_DIR/$UNIT" "$APPS/squintthru.desktop" "$BIN/squintthru"
+  systemctl --user daemon-reload 2>/dev/null || true
+  say "SquintThru removed."
+  echo "Settings are still in ~/.config/squintthru. Steam debugging is still on;"
+  echo "to turn it off, delete $HOME/.local/share/Steam/$CEF_FLAG and restart Steam."
+  exit 0
+fi
+
+command -v python3 >/dev/null || { echo "python3 is required" >&2; exit 1; }
+python3 -c 'import sys; sys.exit(sys.version_info < (3, 8))' || { echo "python3 3.8 or newer is required" >&2; exit 1; }
+chmod +x "$HERE/squintthru" "$HERE/install.sh"
+
+# Optional: the compiled eye reader. squint.py reads eye data itself and only
+# falls back to this if that fails, so a missing compiler is fine.
+if command -v gcc >/dev/null; then
+  gcc -O2 -o "$HERE/eyestream" "$HERE/eyestream.c" -lpthread && echo "Built eyestream fallback."
+fi
+
+# Steam's CEF debug port is how SquintThru presses the Room View button.
+cef_open() { python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/json', timeout=2)" 2>/dev/null; }
+restart_steam=0
+if ! cef_open; then
+  for d in "${STEAM_DIRS[@]}"; do
+    if [[ -d "$d" ]]; then
+      touch "$d/$CEF_FLAG"
+      restart_steam=1
+      echo "Turned on Steam debugging ($d/$CEF_FLAG)."
+      break
+    fi
+  done
+  [[ $restart_steam == 1 ]] || echo "Couldn't find your Steam folder. Start Steam with -cef-enable-debugging instead."
+fi
+
+# Stop a copy started by hand the old way, so the service can take the port.
+pkill -f "python3 -u squint.py" 2>/dev/null || true
+pkill -f "python3 -u $HERE/squint.py" 2>/dev/null || true
+
+mkdir -p "$UNIT_DIR" "$APPS" "$BIN"
+cat >"$UNIT_DIR/$UNIT" <<EOF
+[Unit]
+Description=SquintThru: squint to see your room
+After=default.target
+
+[Service]
+ExecStart="$(command -v python3)" -u "$HERE/squint.py"
+WorkingDirectory=$HERE
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target
+EOF
+
+cat >"$APPS/squintthru.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=SquintThru
+Comment=Squint to see your room
+Exec="$HERE/squintthru" open
+Icon=$HERE/icon.svg
+Terminal=false
+Categories=Utility;Game;
+StartupWMClass=SquintThru
+EOF
+command -v update-desktop-database >/dev/null && update-desktop-database "$APPS" 2>/dev/null || true
+
+ln -sf "$HERE/squintthru" "$BIN/squintthru"
+
+systemctl --user daemon-reload
+systemctl --user enable "$UNIT" >/dev/null 2>&1
+systemctl --user restart "$UNIT"
+
+say "SquintThru is installed and running."
+echo "  Open the app:   SquintThru in your app menu, or run: squintthru"
+echo "  It starts by itself whenever you log in."
+[[ ":$PATH:" == *":$BIN:"* ]] || echo "  (Add $BIN to your PATH to use the squintthru command.)"
+if [[ $restart_steam == 1 ]]; then
+  say "Restart Steam once so the debugging change takes effect."
+fi
