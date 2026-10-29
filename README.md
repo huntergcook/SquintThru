@@ -9,6 +9,17 @@ Turns on Steam Frame passthrough (Room View) while you squint, and turns it back
 - `roomview.py` clicks the Room View button on the SteamVR dashboard bar through Steam's CEF debug port (`127.0.0.1:8080`).
 - `tuner.html` is a live tuning page served by `squint.py` at http://127.0.0.1:8765.
 
+### Silencing the click sound
+
+Steam plays its button-click sound after every dashboard action, so each squint would normally click. `roomview.toggle()` silences it in the same page script that clicks the button:
+
+1. Clicking the Room View button queues the nav sound on a 1 ms timer, so there's a short window to cancel it.
+2. Right after `button.click()`, the script calls `SuppressImminentNavSound()` on Steam's nav sound controller, which cancels the queued sound.
+3. That controller lives in a webpack module in the main Steam UI window (the bar overlay's `opener`). Webpack module ids change between Steam builds, so the script doesn't use a fixed id. It pushes a dummy chunk into `webpackChunksteamui` to get webpack's `require`, then searches every module's source for `SuppressImminentNavSound(){`. It caches the controller it finds on the window as `__squintNav`, so the search only runs once per Steam session.
+4. All of this is wrapped in `try/catch`. If a Steam update breaks it, toggling still works and you just hear the click again.
+
+To keep the sound, call `roomview.toggle(quiet=False)`. The code is the `SUPPRESS` snippet in `roomview.py`.
+
 ## Requirements
 
 - A Steam Frame with eye tracking, with SteamVR running.
