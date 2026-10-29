@@ -20,8 +20,8 @@ DEFAULTS = {
     "other_min": 0.0,        # ...while the other eye is in this band
     "other_max": 0.93,
     "release_above": 0.9,    # squint eye above this counts as "stopped squinting"
-    "hold": 0.02,            # seconds a squint must last before acting
-    "release_hold": 0.02,    # seconds the eye must stay open before releasing
+    "hold": 0.001,           # seconds a squint must last before acting
+    "release_hold": 0.001,   # seconds the eye must stay open before releasing
     "min_on": 0.02,          # passthrough stays on at least this long once triggered
     "double_wink": False,    # two quick winks of one eye toggle passthrough
     "wink_eye": "right",     # "left", "right" or "either"

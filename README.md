@@ -64,8 +64,8 @@ Changes in the tuner save to `settings.json` right away. **Reset to defaults** d
 | `squint_below` | 0.79 | The squint eye must be below this... |
 | `other_min` / `other_max` | 0.0 / 0.93 | ...while the other eye is in this band |
 | `release_above` | 0.9 | The squint eye above this counts as open again |
-| `hold` | 20 ms | How long a squint must last before passthrough turns on (tuner: 1–100 ms) |
-| `release_hold` | 20 ms | How long the eye must stay open before it turns off (tuner: 1–100 ms) |
+| `hold` | 1 ms | How long a squint must last before passthrough turns on (tuner: 1–100 ms) |
+| `release_hold` | 1 ms | How long the eye must stay open before it turns off (tuner: 1–100 ms) |
 | `min_on` | 20 ms | Once on, passthrough stays on at least this long |
 | `double_wink` | off | Two quick winks of `wink_eye` toggle passthrough |
 | `wink_eye` / `wink_below` / `wink_max` / `wink_gap` | right / 0.35 / 0.4 s / 0.6 s | Double-wink tuning |
