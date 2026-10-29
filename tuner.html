@@ -179,8 +179,8 @@ document.documentElement.addEventListener("pointerleave", () => { cursor.style.d
 </script>
 <script>
 const TIMING = [
-  ["hold", "Squint for", 0.02, 0.2, 0.01, "How long to squint before passthrough turns on."],
-  ["release_hold", "Open for", 0.02, 0.2, 0.01, "How long your eye must be open again before it turns off."],
+  ["hold", "Squint for", 0.001, 0.1, 0.001, "How long to squint before passthrough turns on.", "ms"],
+  ["release_hold", "Open for", 0.001, 0.1, 0.001, "How long your eye must be open again before it turns off.", "ms"],
   ["min_on", "Stay on at least", 0.02, 0.2, 0.01, "Stops flicker when you squint again quickly."],
 ];
 const WINK = [
@@ -188,7 +188,7 @@ const WINK = [
   ["wink_gap", "Time between winks", 0.2, 1.5, 0.05, "The second wink must come within this time.", "s"],
   ["wink_below", "Shut below", 0.05, 0.8, 0.01, "How shut the eye must be to count as a wink.", ""],
 ];
-const SLIDERS = [...TIMING.map((t) => [...t, "s"]), ...WINK];
+const SLIDERS = [...TIMING.map((t) => t.length > 6 ? t : [...t, "s"]), ...WINK];
 // Per eye, two handles. Which settings they drive depends on the eye's role.
 const KNOBS = {
   squint: [["squint_below", "Squinting below", "var(--squint)"],
@@ -307,7 +307,8 @@ function render(live) {
   if (!settings) return;
   for (const [k, , , , , , unit] of SLIDERS) {
     if (document.activeElement !== $("s_" + k)) $("s_" + k).value = settings[k];
-    $("o_" + k).textContent = Number(settings[k]).toFixed(2) + (unit ? " " + unit : "");
+    $("o_" + k).textContent = unit === "ms" ? Math.round(settings[k] * 1000) + " ms"
+      : Number(settings[k]).toFixed(2) + (unit ? " " + unit : "");
   }
   $("enabled").checked = settings.enabled;
   $("double_wink").checked = settings.double_wink;
