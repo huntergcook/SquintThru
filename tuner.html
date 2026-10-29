@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Squint Tuner</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #ffffff; --text: #16181d; --dim: #646a76; --line: #dde0e6;
+    --accent: #2f6fde; --squint: #d9822b; --band: #2fa36b33; --band-edge: #2fa36b;
+    --release: #7b61d9; --on: #2fa36b; --warn: #c2410c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #101216; --panel: #191c22; --text: #eceef2; --dim: #9aa1ad; --line: #2a2e37;
+      --accent: #5b93f0; --squint: #f0a04b; --band: #3cc68233; --band-edge: #3cc682;
+      --release: #9d86f0; --on: #3cc682; --warn: #fb923c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 17px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 20px 16px 40px; }
+  header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+  h1 { font-size: 22px; margin: 0; flex: 1; min-width: 180px; }
+  .chip { padding: 6px 12px; border-radius: 999px; font-size: 14px; font-weight: 600;
+          background: var(--line); color: var(--dim); transition: background .15s, color .15s; }
+  .chip.active { background: var(--squint); color: #fff; }
+  .chip.on { background: var(--on); color: #fff; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+            padding: 16px; margin-bottom: 14px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim);
+       margin: 0 0 4px; font-weight: 600; }
+  .hint { color: var(--dim); font-size: 14px; margin: 0 0 12px; }
+
+  /* Eye blocks: bar and its sliders share one column so handles line up with the lines. */
+  .eye { display: grid; grid-template-columns: 64px 1fr 48px; column-gap: 10px; align-items: center;
+         padding: 10px 0; }
+  .eye + .eye { border-top: 1px solid var(--line); }
+  .eye .name { font-weight: 600; grid-row: span 3; align-self: start; padding-top: 4px; }
+  .eye .role { display: block; font-size: 12px; color: var(--dim); font-weight: 400; }
+  .eye .val { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .track { position: relative; height: 30px; border-radius: 8px; background: var(--bg);
+           border: 1px solid var(--line); overflow: hidden; }
+  .fill { position: absolute; inset: 0 auto 0 0; background: var(--accent); opacity: .75; }
+  .zone { position: absolute; top: 0; bottom: 0; }
+  .zone.trigger { background: color-mix(in srgb, var(--squint) 22%, transparent); }
+  .zone.band { background: var(--band); border-left: 2px solid var(--band-edge);
+               border-right: 2px solid var(--band-edge); }
+  .mark { position: absolute; top: -2px; bottom: -2px; width: 3px; margin-left: -1.5px; }
+  .mark.squint { background: var(--squint); }
+  .mark.release { background: var(--release); }
+  .knob { grid-column: 2; position: relative; }
+  .knob input { width: 100%; margin: 6px 0 0; height: 30px; }
+  .knob-label { grid-column: 3; font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+  .knob-caption { grid-column: 2; font-size: 13px; color: var(--dim); margin: -2px 0 2px; }
+
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+         flex-wrap: wrap; margin: 10px 0; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .seg button { border: 0; background: transparent; color: var(--text); padding: 10px 18px;
+                font: inherit; cursor: pointer; min-width: 84px; }
+  .seg button.sel { background: var(--accent); color: #fff; }
+  .slider { margin: 14px 0 16px; }
+  .slider label { display: flex; justify-content: space-between; gap: 12px; }
+  .slider output { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .slider small { display: block; color: var(--dim); font-size: 13px; }
+  input[type=range] { width: 100%; height: 34px; accent-color: var(--accent); margin: 4px 0 0; }
+  .buttons { display: flex; gap: 10px; flex-wrap: wrap; }
+  .btn { border: 1px solid var(--line); background: var(--panel); color: var(--text); font: inherit;
+         padding: 12px 18px; border-radius: 10px; cursor: pointer; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 600; }
+  .switch input { width: 22px; height: 22px; accent-color: var(--on); }
+
+  .calib-step { font-size: 22px; font-weight: 600; margin: 4px 0 10px; }
+  .progress { height: 10px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line);
+              overflow: hidden; margin-bottom: 12px; }
+  .progress div { height: 100%; width: 0; background: var(--accent); }
+  .msg { font-weight: 600; margin: 0 0 12px; }
+  .msg.bad { color: var(--warn); }
+  ul.log { list-style: none; margin: 0; padding: 0; font: 14px/1.6 ui-monospace, monospace; color: var(--dim); }
+  details summary { cursor: pointer; color: var(--dim); font-size: 14px; }
+  .error { color: var(--warn); font-weight: 600; }
+  /* The headset's compositor hides the system mouse cursor, so the page draws its own. */
+  #cursor { position: fixed; left: 0; top: 0; width: 18px; height: 18px; margin: -9px 0 0 -9px;
+            border-radius: 50%; border: 3px solid #fff; background: var(--accent);
+            box-shadow: 0 0 0 2px #000a; pointer-events: none; z-index: 10; display: none; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Squint Passthrough</h1>
+    <label class="switch"><input type="checkbox" id="enabled"> On</label>
+    <span class="chip" id="squintChip">Not squinting</span>
+    <span class="chip" id="ptChip">Passthrough …</span>
+  </header>
+  <p class="error" id="err" hidden>Lost connection to the squint script.</p>
+
+  <section id="calib">
+    <h2>Calibrate</h2>
+    <p class="hint">Records your open and squinting eyes for a few seconds each, then sets the lines below for you.</p>
+    <div id="calibIdle">
+      <p class="msg" id="calibMsg" hidden></p>
+      <button class="btn primary" id="calibStart">Start calibration</button>
+    </div>
+    <div id="calibRun" hidden>
+      <div class="calib-step" id="calibStep"></div>
+      <div class="progress"><div id="calibBar"></div></div>
+      <button class="btn" id="calibCancel">Cancel</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Your eyes</h2>
+    <p class="hint">The blue bar is how open each eye is right now. Drag the handle under a bar to move the line above it.</p>
+    <div id="eyes"></div>
+  </section>
+
+  <section>
+    <h2>Timing</h2>
+    <div id="sliders"></div>
+  </section>
+
+  <section>
+    <h2>Double wink</h2>
+    <p class="hint">Wink one eye twice quickly to switch passthrough on or off. Blinks with both eyes don't count.</p>
+    <div class="row">
+      <label class="switch"><input type="checkbox" id="double_wink"> Double wink switches passthrough</label>
+    </div>
+    <div id="winkBody">
+      <div class="row">
+        <span>Wink eye</span>
+        <div class="seg" data-key="wink_eye">
+          <button data-v="left">Left</button><button data-v="right">Right</button><button data-v="either">Either</button>
+        </div>
+      </div>
+      <div id="winkSliders"></div>
+      <p class="hint">While this is on, a squint has to last longer than the longest wink before it counts.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>Options</h2>
+    <div class="row">
+      <span>Mode<span class="hint" style="display:block;margin:0">Hold: on while squinting. Toggle: each squint switches it.</span></span>
+      <div class="seg" data-key="mode">
+        <button data-v="hold">Hold</button><button data-v="toggle">Toggle</button>
+      </div>
+    </div>
+    <div class="row">
+      <span>Squint eye</span>
+      <div class="seg" data-key="squint_eye">
+        <button data-v="left">Left</button><button data-v="right">Right</button>
+      </div>
+    </div>
+    <div class="buttons" style="margin-top:14px">
+      <button class="btn" id="flip">Switch passthrough now</button>
+      <button class="btn" id="reset">Reset to defaults</button>
+    </div>
+  </section>
+
+  <section>
+    <details>
+      <summary>Recent events</summary>
+      <ul class="log" id="log" style="margin-top:10px"></ul>
+    </details>
+  </section>
+</main>
+<div id="cursor"></div>
+<script>
+const cursor = document.getElementById("cursor");
+addEventListener("pointermove", (e) => {
+  cursor.style.display = "block";
+  cursor.style.transform = `translate(${e.clientX}px, ${e.clientY}px)`;
+});
+document.documentElement.addEventListener("pointerleave", () => { cursor.style.display = "none"; });
+</script>
+<script>
+const TIMING = [
+  ["hold", "Squint for", 0.02, 0.2, 0.01, "How long to squint before passthrough turns on."],
+  ["release_hold", "Open for", 0.02, 0.2, 0.01, "How long your eye must be open again before it turns off."],
+  ["min_on", "Stay on at least", 0.02, 0.2, 0.01, "Stops flicker when you squint again quickly."],
+];
+const WINK = [
+  ["wink_max", "Longest wink", 0.1, 1, 0.05, "A wink longer than this doesn't count.", "s"],
+  ["wink_gap", "Time between winks", 0.2, 1.5, 0.05, "The second wink must come within this time.", "s"],
+  ["wink_below", "Shut below", 0.05, 0.8, 0.01, "How shut the eye must be to count as a wink.", ""],
+];
+const SLIDERS = [...TIMING.map((t) => [...t, "s"]), ...WINK];
+// Per eye, two handles. Which settings they drive depends on the eye's role.
+const KNOBS = {
+  squint: [["squint_below", "Squinting below", "var(--squint)"],
+           ["release_above", "Open again above", "var(--release)"]],
+  other:  [["other_min", "Band from", "var(--band-edge)"],
+           ["other_max", "Band to", "var(--band-edge)"]],
+};
+let settings = null, pending = {}, timer = null, lastEdit = 0;
+let calibFlow = null; // {step, t0} while the page drives calibration
+
+const $ = (id) => document.getElementById(id);
+
+const sliderHTML = ([k, label, min, max, step, help]) => `
+  <div class="slider">
+    <label for="s_${k}"><span>${label}</span><output id="o_${k}"></output></label>
+    <input type="range" id="s_${k}" min="${min}" max="${max}" step="${step}">
+    <small>${help}</small>
+  </div>`;
+$("sliders").innerHTML = TIMING.map(sliderHTML).join("");
+$("winkSliders").innerHTML = WINK.map(sliderHTML).join("");
+
+$("eyes").innerHTML = ["l", "r"].map((e) => `
+  <div class="eye">
+    <span class="name">${e === "l" ? "Left" : "Right"}<span class="role" id="role_${e}"></span></span>
+    <div class="track">
+      <div class="zone" id="zone_${e}"></div><div class="fill" id="fill_${e}"></div>
+      <div class="mark" id="m0_${e}"></div><div class="mark" id="m1_${e}"></div>
+    </div>
+    <span class="val" id="val_${e}"></span>
+    ${[0, 1].map((i) => `
+      <div class="knob"><input type="range" id="k${i}_${e}" min="0" max="1" step="0.01"></div>
+      <span class="knob-label" id="kv${i}_${e}"></span>
+      <div class="knob-caption" id="kc${i}_${e}"></div><span></span>`).join("")}
+  </div>`).join("");
+
+const roleOf = (e) => (settings.squint_eye === "right") === (e === "r") ? "squint" : "other";
+
+function post(path, body) {
+  return fetch(path, { method: "POST", headers: { "Content-Type": "application/json" },
+                       body: JSON.stringify(body || {}) });
+}
+
+function change(k, v) {
+  settings[k] = v; pending[k] = v; lastEdit = Date.now();
+  render();
+  clearTimeout(timer);
+  timer = setTimeout(() => { post("/settings", pending); pending = {}; }, 120);
+}
+
+for (const [k] of SLIDERS) $("s_" + k).addEventListener("input", (e) => change(k, parseFloat(e.target.value)));
+$("double_wink").addEventListener("change", (e) => change("double_wink", e.target.checked));
+for (const e of ["l", "r"]) for (const i of [0, 1]) {
+  $(`k${i}_${e}`).addEventListener("input", (ev) => {
+    let v = parseFloat(ev.target.value);
+    const [key] = KNOBS[roleOf(e)][i];
+    // Keep each pair in order: squint line below the release line, band start below band end.
+    const [lo, hi] = KNOBS[roleOf(e)].map((x) => x[0]);
+    if (key === lo) v = Math.min(v, settings[hi] - 0.02);
+    else v = Math.max(v, settings[lo] + 0.02);
+    change(key, Math.round(v * 100) / 100);
+  });
+}
+$("enabled").addEventListener("change", (e) => change("enabled", e.target.checked));
+document.querySelectorAll(".seg").forEach((seg) => seg.addEventListener("click", (e) => {
+  if (e.target.dataset.v) change(seg.dataset.key, e.target.dataset.v);
+}));
+$("flip").onclick = () => post("/flip");
+$("reset").onclick = () => { lastEdit = 0; post("/reset"); };
+
+// Calibration: open eyes, a short pause to get ready, then squint.
+const STEPS = [
+  { text: "Look ahead with your eyes relaxed", phase: "open" },
+  { text: "Get ready to squint…", pause: 2 },
+  { text: "Squint and hold it", phase: "squint" },
+];
+async function runStep(i) {
+  if (!calibFlow) return;
+  if (i >= STEPS.length) {
+    await post("/calibrate", { phase: "apply" });
+    calibFlow = null; lastEdit = 0;
+    return;
+  }
+  const step = STEPS[i];
+  calibFlow = { step: i, t0: Date.now(), length: (step.pause || 3) * 1000 };
+  if (step.phase) await post("/calibrate", { phase: step.phase });
+  else setTimeout(() => runStep(i + 1), step.pause * 1000);
+}
+$("calibStart").onclick = () => { calibFlow = {}; runStep(0); };
+$("calibCancel").onclick = () => { calibFlow = null; post("/calibrate", { phase: "cancel" }); };
+
+function renderCalib(c) {
+  $("calibIdle").hidden = !!calibFlow;
+  $("calibRun").hidden = !calibFlow;
+  if (calibFlow && calibFlow.length) {
+    const step = STEPS[calibFlow.step];
+    $("calibStep").textContent = `Step ${calibFlow.step + 1} of 3: ${step.text}`;
+    const done = step.phase ? 1 - c.left / c.seconds : (Date.now() - calibFlow.t0) / calibFlow.length;
+    $("calibBar").style.width = Math.min(100, done * 100) + "%";
+    // The server ends a recording on its own; move on once it has.
+    if (step.phase && !c.phase && Date.now() - calibFlow.t0 > 500 && !calibFlow.advanced) {
+      calibFlow.advanced = true;
+      runStep(calibFlow.step + 1);
+    }
+  }
+  $("calibMsg").hidden = !c.message;
+  $("calibMsg").textContent = c.message;
+  $("calibMsg").classList.toggle("bad", !c.message.startsWith("Done"));
+}
+
+function place(el, from, to) {
+  el.style.left = from * 100 + "%";
+  if (to !== undefined) el.style.width = Math.max(0, to - from) * 100 + "%";
+}
+
+function render(live) {
+  if (!settings) return;
+  for (const [k, , , , , , unit] of SLIDERS) {
+    if (document.activeElement !== $("s_" + k)) $("s_" + k).value = settings[k];
+    $("o_" + k).textContent = Number(settings[k]).toFixed(2) + (unit ? " " + unit : "");
+  }
+  $("enabled").checked = settings.enabled;
+  $("double_wink").checked = settings.double_wink;
+  $("winkBody").hidden = !settings.double_wink;
+  document.querySelectorAll(".seg").forEach((seg) => seg.querySelectorAll("button").forEach((b) =>
+    b.classList.toggle("sel", settings[seg.dataset.key] === b.dataset.v)));
+
+  for (const e of ["l", "r"]) {
+    const role = roleOf(e), knobs = KNOBS[role];
+    $("role_" + e).textContent = role === "squint" ? "squint eye" : "other eye";
+    const zone = $("zone_" + e);
+    zone.className = "zone " + (role === "squint" ? "trigger" : "band");
+    if (role === "squint") place(zone, 0, settings.squint_below);
+    else place(zone, settings.other_min, settings.other_max);
+    knobs.forEach(([key, label, color], i) => {
+      const mark = $(`m${i}_${e}`), knob = $(`k${i}_${e}`);
+      mark.hidden = role !== "squint";
+      mark.className = "mark " + (i === 0 ? "squint" : "release");
+      place(mark, settings[key]);
+      if (document.activeElement !== knob) knob.value = settings[key];
+      knob.style.accentColor = color;
+      $(`kv${i}_${e}`).textContent = Number(settings[key]).toFixed(2);
+      $(`kc${i}_${e}`).textContent = label;
+    });
+  }
+  $("kc0_" + (settings.squint_eye === "right" ? "r" : "l")).textContent =
+    "Squinting below: the shaded area is what counts as a squint";
+  $("kc0_" + (settings.squint_eye === "right" ? "l" : "r")).textContent =
+    "Band from / to: this eye must stay inside the green band";
+  $("kc1_" + (settings.squint_eye === "right" ? "l" : "r")).textContent = "";
+
+  if (!live) return;
+  for (const e of ["l", "r"]) {
+    $("fill_" + e).style.width = live[e] * 100 + "%";
+    $("val_" + e).textContent = live[e].toFixed(2);
+  }
+  $("squintChip").textContent = live.squinting ? "Squinting" : "Not squinting";
+  $("squintChip").classList.toggle("active", live.squinting);
+  const p = live.passthrough;
+  $("ptChip").textContent = p === null ? "Passthrough ?" : "Passthrough " + p;
+  $("ptChip").classList.toggle("on", p === "on");
+  $("log").innerHTML = live.events.map((e) => `<li>${e.replace(/</g, "&lt;")}</li>`).join("");
+  renderCalib(live.calib);
+}
+
+async function poll() {
+  try {
+    const live = await (await fetch("/state")).json();
+    // Don't let a poll overwrite a slider the user is still dragging.
+    if (Date.now() - lastEdit > 600) settings = live.settings;
+    $("err").hidden = true;
+    render(live);
+  } catch { $("err").hidden = false; }
+  setTimeout(poll, 70);
+}
+poll();
+</script>
+</body>
+</html>

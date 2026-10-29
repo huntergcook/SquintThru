@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "mode": "hold",
+  "squint_eye": "right",
+  "squint_below": 0.79,
+  "other_min": 0.0,
+  "other_max": 0.93,
+  "release_above": 0.9,
+  "hold": 0.1,
+  "release_hold": 0.1,
+  "min_on": 0.1,
+  "double_wink": true,
+  "wink_eye": "right",
+  "wink_below": 0.35,
+  "wink_max": 0.4,
+  "wink_gap": 0.6
+}
