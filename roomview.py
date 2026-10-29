@@ -85,7 +85,7 @@ def bar_path(port=PORT):
     try:
         targets = json.load(urllib.request.urlopen(f"http://127.0.0.1:{port}/json", timeout=2))
     except OSError as e:
-        raise RoomViewError(f"Steam debug port {port} isn't open (see README: Steam debugging)") from e
+        raise RoomViewError("Steam's debug port isn't open yet. Restart your Steam Frame once after installing.") from e
     for t in targets:
         if t.get("url", "").endswith("vrOverlayKey=valve.steam.gamepadui.bar"):
             ws = t["webSocketDebuggerUrl"]

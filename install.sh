@@ -1,10 +1,53 @@
 #!/usr/bin/env bash
 # Installs SquintThru on the Steam Frame: a background service that starts with
 # your session, an app-menu entry, and the `squintthru` command.
+#
+# One line, nothing to download first (also how you update):
+#   curl -fsSL https://raw.githubusercontent.com/huntergcook/SquintThru/main/install.sh | bash
+# From a clone:
 #   ./install.sh               install or update (safe to run again after git pull)
 #   ./install.sh --uninstall   remove it (your settings are kept)
 set -euo pipefail
-HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+
+# Run through curl | bash, there's no checkout next to this script: fetch one
+# into ~/.local/share/squintthru/app and run its installer. The braces make bash
+# read this whole block before running it, so a cut-off download does nothing.
+{
+SRC="${BASH_SOURCE[0]:-}"
+if [[ -z "$SRC" || ! -f "$(dirname "$SRC")/squint.py" ]]; then
+  REPO="${SQUINTTHRU_REPO:-https://github.com/huntergcook/SquintThru}"
+  REF="${SQUINTTHRU_REF:-main}"
+  DEST="${XDG_DATA_HOME:-$HOME/.local/share}/squintthru/app"
+  command -v python3 >/dev/null || { echo "python3 is required" >&2; exit 1; }
+  echo "Downloading SquintThru ($REF)..."
+  mkdir -p "$(dirname "$DEST")"
+  if command -v git >/dev/null; then
+    if [[ -d "$DEST/.git" ]]; then
+      git -C "$DEST" fetch -q --depth 1 "$REPO" "$REF"
+      git -C "$DEST" reset -q --hard FETCH_HEAD
+    else
+      rm -rf "$DEST"
+      git clone -q --depth 1 --branch "$REF" "$REPO" "$DEST"
+    fi
+  else
+    # No git: unpack GitHub's tarball of the branch instead.
+    rm -rf "$DEST"
+    python3 - "$REPO/archive/$REF.tar.gz" "$DEST" <<'PY'
+import io, os, sys, tarfile, urllib.request
+url, dest = sys.argv[1:]
+data = urllib.request.urlopen(url, timeout=60).read()
+with tarfile.open(fileobj=io.BytesIO(data)) as t:
+    top = t.getmembers()[0].name.split("/")[0]
+    for m in t.getmembers():
+        m.name = m.name[len(top) + 1:]
+        if m.name:
+            t.extract(m, dest, **({"filter": "data"} if hasattr(tarfile, "data_filter") else {}))
+PY
+  fi
+  exec bash "$DEST/install.sh" "$@"
+fi
+}
+HERE="$(cd "$(dirname "$(readlink -f "$SRC")")" && pwd)"
 UNIT="squintthru.service"
 UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 APPS="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
@@ -89,9 +132,14 @@ systemctl --user enable "$UNIT" >/dev/null 2>&1
 systemctl --user restart "$UNIT"
 
 say "SquintThru is installed and running."
+# Show the app right away when there's a screen to show it on.
+if [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then
+  nohup "$HERE/squintthru" open >/dev/null 2>&1 &
+fi
 echo "  Open the app:   SquintThru in your app menu, or run: squintthru"
+echo "  Update later:   run the same install command again"
 echo "  It starts by itself whenever you log in."
 [[ ":$PATH:" == *":$BIN:"* ]] || echo "  (Add $BIN to your PATH to use the squintthru command.)"
 if [[ $restart_steam == 1 ]]; then
-  say "Restart Steam once so the debugging change takes effect."
+  say "One last step: restart your Steam Frame once. After that, SquintThru starts by itself."
 fi
