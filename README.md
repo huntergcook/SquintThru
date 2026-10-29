@@ -2,6 +2,8 @@
 
 Turns on Steam Frame passthrough (Room View) while you squint, and turns it back off when you open your eye again. Runs on the Steam Frame itself.
 
+![The tuner page at http://127.0.0.1:8765](docs/tuner.png)
+
 ## How it works
 
 - `eyestream` (built from `eyestream.c`) reads eye openness from the headset's eye server (`/dev/shm/eye-server.mmap`) and prints `<left> <right>` about 60 times a second.
