@@ -1,0 +1,13 @@
+{
+  "name": "SquintThru",
+  "short_name": "SquintThru",
+  "description": "Squint to see your room on the Steam Frame",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#101216",
+  "theme_color": "#2f6fde",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="28" fill="#2f6fde"/>
+  <!-- An open eye on the left, a squinting eye on the right -->
+  <path d="M14 64c8-14 18-21 28-21s20 7 28 21c-8 14-18 21-28 21S22 78 14 64z" fill="#fff"/>
+  <circle cx="42" cy="64" r="10" fill="#16181d"/>
+  <path d="M78 66c7-6 15-9 22-9s15 3 22 9" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round"/>
+  <path d="M84 74c5 3 11 4 16 4s11-1 16-4" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" opacity=".7"/>
+</svg>

@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# squintthru: open the SquintThru app window, or control the background service.
+#   squintthru            open the app window (starts the service if needed)
+#   squintthru start|stop|restart|status
+#   squintthru log        follow the service log
+#   squintthru uninstall
+set -euo pipefail
+HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+URL="http://127.0.0.1:8765"
+UNIT="squintthru.service"
+
+running() { python3 -c "import urllib.request; urllib.request.urlopen('$URL/state', timeout=1)" 2>/dev/null; }
+
+ensure_running() {
+  running && return 0
+  if systemctl --user cat "$UNIT" >/dev/null 2>&1; then
+    systemctl --user start "$UNIT"
+  else
+    # Not installed as a service: run it in the background from here.
+    nohup python3 -u "$HERE/squint.py" >>"$HERE/squint.log" 2>&1 &
+  fi
+  for _ in $(seq 30); do running && return 0; sleep 0.1; done
+  echo "SquintThru didn't start. See: squintthru log" >&2
+  return 1
+}
+
+open_window() {
+  # A Chromium-based browser in --app mode gives a plain window with no tabs or address bar.
+  local profile="${XDG_DATA_HOME:-$HOME/.local/share}/squintthru/window"
+  local args=(--app="$URL" --class=SquintThru --window-size=560,940)
+  for b in chromium chromium-browser google-chrome google-chrome-stable brave brave-browser microsoft-edge microsoft-edge-stable; do
+    if command -v "$b" >/dev/null; then
+      mkdir -p "$profile"
+      exec "$b" "${args[@]}" --user-data-dir="$profile" --no-first-run >/dev/null 2>&1
+    fi
+  done
+  if command -v flatpak >/dev/null; then
+    for id in org.chromium.Chromium com.google.Chrome com.brave.Browser com.microsoft.Edge; do
+      if flatpak info "$id" >/dev/null 2>&1; then
+        exec flatpak run "$id" "${args[@]}" >/dev/null 2>&1
+      fi
+    done
+  fi
+  # No Chromium-family browser: a normal tab still works (and offers "Install app" where supported).
+  exec xdg-open "$URL"
+}
+
+case "${1:-open}" in
+  open)      ensure_running && open_window ;;
+  start)     ensure_running && echo "SquintThru is running." ;;
+  stop)      systemctl --user stop "$UNIT" 2>/dev/null || pkill -f "python3 -u $HERE/squint.py" || true ;;
+  restart)   systemctl --user restart "$UNIT" ;;
+  status)    if running; then echo "running at $URL"; else echo "not running"; exit 1; fi ;;
+  log)       journalctl --user -u "$UNIT" -f -n 50 ;;
+  uninstall) exec "$HERE/install.sh" --uninstall ;;
+  *)         sed -n '2,7p' "$0"; exit 2 ;;
+esac
