@@ -3,7 +3,7 @@
   "mode": "hold",
   "squint_eye": "right",
   "squint_below": 0.77,
-  "other_min": 0.1,
+  "other_min": 0.0,
   "other_max": 0.85,
   "release_above": 0.79,
   "hold": 0.01,

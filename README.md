@@ -173,7 +173,7 @@ Settings are saved in `~/.config/squintthru/settings.json` and loaded every time
 | `mode` | `hold` | `hold`: on while squinting. `toggle`: each squint switches it. |
 | `squint_eye` | `right` | The eye that nearly shuts when you squint |
 | `squint_below` | 0.77 | The squint eye must be below this... |
-| `other_min` / `other_max` | 0.1 / 0.85 | ...while the other eye is in this band |
+| `other_min` / `other_max` | 0.0 / 0.85 | ...while the other eye is in this band |
 | `release_above` | 0.79 | The squint eye above this counts as open again |
 | `hold` | 10 ms | How long a squint must last before passthrough turns on |
 | `release_hold` | 0 (instant) | How long the eye must stay open before it turns off |

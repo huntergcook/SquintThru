@@ -21,7 +21,7 @@ DEFAULTS = {
     "mode": "hold",          # "hold": on while squinting; "toggle": each squint flips it
     "squint_eye": "right",   # the eye that nearly shuts when you squint
     "squint_below": 0.77,    # squint eye below this...
-    "other_min": 0.1,        # ...while the other eye is in this band
+    "other_min": 0.0,        # ...while the other eye is in this band
     "other_max": 0.85,
     "release_above": 0.79,   # squint eye above this counts as "stopped squinting"
     "hold": 0.01,            # seconds a squint must last before acting; 0 = the first eye frame
