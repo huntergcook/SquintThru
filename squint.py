@@ -106,6 +106,7 @@ class Passthrough:
         self.flips = 0     # toggle mode, double wink and the page button
         self.ours = False  # True only if we turned it on (hold mode)
         self.asked = None  # when the newest request was made, for the response time
+        self.tones = 0     # Room View tones to play, to confirm a double wink
         self.problem = None
         self.cv = threading.Condition()
         threading.Thread(target=self._run, daemon=True).start()
@@ -119,6 +120,11 @@ class Passthrough:
         with self.cv:
             self.flips += 1
             self.asked = at or time.monotonic()
+            self.cv.notify()
+
+    def tone(self, times):
+        with self.cv:
+            self.tones = times
             self.cv.notify()
 
     def app_opened(self):
@@ -151,12 +157,16 @@ class Passthrough:
     def _run(self):
         while True:
             with self.cv:
-                if self.want is None and not self.flips:
+                if self.want is None and not self.flips and not self.tones:
                     self.cv.wait(timeout=2 if app_open() else KEEPALIVE)
-                want, flips, asked = self.want, self.flips, self.asked
-                self.want, self.flips, self.asked = None, 0, None
+                want, flips, asked, tones = self.want, self.flips, self.asked, self.tones
+                self.want, self.flips, self.asked, self.tones = None, 0, None, 0
             try:
-                if want is None and not flips:
+                if tones and self.rv.tone(tones) == "unknown":
+                    log("no confirmation tone yet: it's learned from the first squint after Steam starts")
+                if want is None and not flips and tones:
+                    state = None
+                elif want is None and not flips:
                     if app_open():
                         state = self.rv.state()   # refresh what the app shows
                     else:
@@ -401,6 +411,7 @@ def main():
         if s["double_wink"] and detector.double_winked(l, r, now, s):
             s = change_settings(enabled=not s["enabled"])
             log("double wink: squinting " + ("on" if s["enabled"] else "off"))
+            pt.tone(1 if s["enabled"] else 2)   # one tone for on, two for off
         if not s["enabled"]:
             detector.reset(s)   # also turns off passthrough that a squint turned on
             continue

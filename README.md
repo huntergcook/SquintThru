@@ -101,6 +101,8 @@ Eye frames arrive about every 17 ms. At Instant, the delay you feel comes down t
 
 Wink one eye twice quickly to turn squinting on or off, the same as the **On** box at the top. Use it to keep squints from switching passthrough during a game where you squint a lot, then turn squinting back on without taking off the headset. Choose which eye's winks count, how short a wink must be, how close together the two winks must be, and how shut the eye must be. Winks only count while the other eye stays open, so blinks never toggle it.
 
+You hear Steam's Room View tone to confirm: **once** when squinting turns on, **twice** when it turns off. It plays even with **Click sound** off. SquintThru learns the tone from the first Room View press after Steam starts, so if you double wink before your first squint, the switch still happens but you won't hear it.
+
 While double wink is on, a squint has to last longer than the longest wink before it counts, so squints get a little slower.
 
 ### Options
@@ -109,7 +111,7 @@ While double wink is on, a squint has to last longer than the longest wink befor
 
 - **Mode**: **Hold** keeps passthrough on while you squint. **Toggle** makes each squint switch it on or off.
 - **Squint eye**: the eye you squint with.
-- **Click sound**: plays Steam's button click each time passthrough switches. Off by default, so peeking is silent.
+- **Click sound**: plays Steam's button click each time passthrough switches. Off by default, so peeking is silent. The double wink tones play either way.
 - **Ignore blinks**: stops the start of a normal blink from flashing passthrough. Off by default, because when you squint hard, for example during a PCVR game, your other eye can close too and the guard undoes the squint. Turn it on if blinks flash passthrough.
 - **Reset to defaults**: puts every setting back to how it started.
 
@@ -207,6 +209,8 @@ Steam plays its button-click sound after every dashboard action. With **Click so
 2. Right after `button.click()`, the page helper calls `SuppressImminentNavSound()` on Steam's nav sound controller, which cancels the queued sound.
 3. That controller lives in a webpack module in the main Steam UI window (the bar overlay's `opener`). Webpack module ids change between Steam builds, so the helper doesn't use a fixed id. It pushes a dummy chunk into `webpackChunksteamui` to get webpack's `require`, then searches every module's source for `SuppressImminentNavSound(){`. It caches the controller it finds, so the search only runs once per Steam session.
 4. All of this is wrapped in `try/catch`. If a Steam update breaks it, switching still works and you just hear the click again.
+
+The double wink tone reuses the same controller. Steam's sound methods aren't documented, so SquintThru doesn't guess their names. While the Room View button is being pressed, it records which method on the controller gets called and with what arguments, then replays that exact call to play the tone. That also means it keeps working if Steam renames the method.
 
 ## Troubleshooting
 

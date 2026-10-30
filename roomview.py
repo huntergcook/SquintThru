@@ -30,20 +30,44 @@ window.__squint = (() => {
   // Steam plays its click sound after every dashboard action. The click queues
   // it on a 1 ms timer, and SuppressImminentNavSound() cancels it. The module
   // is found by its source, since webpack ids change between Steam builds.
-  let nav = null;
-  const quiet = () => {
-    try {
-      const w = opener;
-      if (!w.__squintNav) {
-        let req; w.webpackChunksteamui.push([[Symbol("squint")], {}, (r) => { req = r; }]);
-        for (const id of Object.keys(req.m)) {
-          if (!String(req.m[id]).includes("SuppressImminentNavSound(){")) continue;
-          const n = Object.values(req(id)).find((v) => v && typeof v.SuppressImminentNavSound === "function");
-          if (n) { w.__squintNav = n; break; }
-        }
+  const nav = () => {
+    const w = opener;
+    if (!w.__squintNav) {
+      let req; w.webpackChunksteamui.push([[Symbol("squint")], {}, (r) => { req = r; }]);
+      for (const id of Object.keys(req.m)) {
+        if (!String(req.m[id]).includes("SuppressImminentNavSound(){")) continue;
+        const n = Object.values(req(id)).find((v) => v && typeof v.SuppressImminentNavSound === "function");
+        if (n) { w.__squintNav = n; break; }
       }
-      (nav = nav || w.__squintNav).SuppressImminentNavSound();
-    } catch (e) {}
+    }
+    return w.__squintNav;
+  };
+  const quiet = () => { try { nav().SuppressImminentNavSound(); } catch (e) {} };
+  // The Room View tone, for confirming a double wink. Steam's sound methods aren't
+  // documented, so instead of guessing, record which method (and arguments) the
+  // controller gets called with when the Room View button is pressed, and replay
+  // that exact call later. It's learned on the first press after Steam starts.
+  const listen = (n) => {
+    if (n.__squintRec) return;
+    n.__squintRec = { calls: null };
+    const names = new Set();
+    for (let o = n; o && o !== Object.prototype; o = Object.getPrototypeOf(o))
+      Object.getOwnPropertyNames(o).forEach((k) => names.add(k));
+    for (const k of names) {
+      if (k === "constructor" || k.startsWith("Suppress")) continue;
+      let d = null;
+      for (let o = n; o && !d; o = Object.getPrototypeOf(o)) d = Object.getOwnPropertyDescriptor(o, k);
+      const f = d && d.value;   // methods only; never trigger getters
+      if (typeof f !== "function") continue;
+      n[k] = function (...a) {
+        if (n.__squintRec.calls) n.__squintRec.calls.push([k, a]);
+        return f.apply(this, a);
+      };
+    }
+  };
+  const learnTone = (calls) => {
+    const pick = calls.find(([k]) => /sound|play/i.test(k)) || calls[0];
+    if (pick) opener.__squintTone = pick;
   };
   let assumed = null, assumedAt = 0;
   const current = (b) => {
@@ -55,7 +79,10 @@ window.__squint = (() => {
     return actual;
   };
   const press = (b, on, silent) => {
+    let n = null;
+    try { n = nav(); listen(n); n.__squintRec.calls = []; } catch (e) { n = null; }
     b.click();
+    if (n) { try { learnTone(n.__squintRec.calls); } catch (e) {} n.__squintRec.calls = null; }
     if (silent) quiet();
     assumed = on; assumedAt = performance.now();
   };
@@ -73,6 +100,16 @@ window.__squint = (() => {
       const was = current(b);
       press(b, !was, silent);
       return was ? "on" : "off";
+    },
+    // Plays the Room View tone `times` times. Returns "ok", or "unknown" if no
+    // press has happened since Steam started, so the tone isn't learned yet.
+    tone(times) {
+      const t = opener.__squintTone;
+      if (!t) return "unknown";
+      const n = nav();
+      const play = () => { try { n[t[0]](...t[1]); } catch (e) {} };
+      for (let i = 0; i < times; i++) setTimeout(play, 220 * i);
+      return "ok";
     },
   };
 })();
@@ -109,6 +146,11 @@ class RoomView:
 
     def flip(self, quiet=True):
         return self._helper(f"flip({'true' if quiet else 'false'})")
+
+    def tone(self, times=1):
+        """Plays Steam's Room View tone. Returns "ok", or "unknown" until the tone has
+        been learned from a Room View press since Steam started."""
+        return self._helper(f"tone({int(times)})")
 
     def check(self):
         """Makes sure there's a working connection, without sending Steam anything if there
