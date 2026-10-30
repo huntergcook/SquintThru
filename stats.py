@@ -96,7 +96,9 @@ def fmt(r, label):
     return "   ".join(parts)
 
 def service(action):
-    return subprocess.run(["systemctl", "--user", action, UNIT], capture_output=True).returncode == 0
+    # The squintthru command handles both a systemd service and a plain background process.
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "squintthru")
+    return subprocess.run([script, action], capture_output=True).returncode == 0
 
 def main():
     compare = "--compare" in sys.argv
