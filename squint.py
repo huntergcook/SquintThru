@@ -2,15 +2,18 @@
 # Squint = the squint eye nearly shut while the other stays mostly open (measured:
 # open L1.0/R1.0, squint L~0.85/R~0.03, closed L~0.21/R0.0).
 # Serves the SquintThru app page at http://127.0.0.1:8765.
-import json, os, sys, threading, time
+import json, os, subprocess, sys, threading, time
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import eyes, roomview
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-CONFIG_DIR = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "squintthru")
+CONFIG_HOME = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+CONFIG_DIR = os.path.join(CONFIG_HOME, "squintthru")
 SETTINGS_FILE = os.path.join(CONFIG_DIR, "settings.json")
 OLD_SETTINGS_FILE = os.path.join(HERE, "settings.json")  # where settings lived before the installer
+AUTOSTART_FILES = (os.path.join(CONFIG_HOME, "systemd/user/default.target.wants/squintthru.service"),
+                   os.path.join(CONFIG_HOME, "autostart/squintthru.desktop"))
 PORT = 8765
 
 DEFAULTS = {
@@ -70,8 +73,22 @@ def change_settings(**changes):
         settings = {**settings, **changes}
         save_settings()
     return settings
+
+def autostart_enabled():
+    return any(os.path.lexists(p) for p in AUTOSTART_FILES)
+
+def set_autostart(on):
+    live["autostart"] = on   # so the app's switch doesn't jump back while this runs
+    try:
+        subprocess.run([os.path.join(HERE, "squintthru"), "autostart", "on" if on else "off"],
+                       check=True, capture_output=True, timeout=10)
+        log("start automatically:", "on" if on else "off")
+    except (OSError, subprocess.SubprocessError) as e:
+        log("couldn't change Start automatically:", e)
+    live["autostart"] = autostart_enabled()
+
 live = {"l": 0.0, "r": 0.0, "squinting": False, "passthrough": None, "latency_ms": None,
-        "eyes": False, "problem": "", "ours": False}
+        "eyes": False, "problem": "", "ours": False, "autostart": autostart_enabled()}
 events = deque(maxlen=12)
 
 # Power: the app page polls /state every 70 ms while it's visible. When it hasn't
@@ -308,6 +325,8 @@ class Handler(BaseHTTPRequestHandler):
                 except OSError: pass
         elif self.path == "/flip":
             pt.flip()
+        elif self.path == "/autostart":
+            set_autostart(body.get("on") is True)
         wake.set()
         self._send(b"{}")
 

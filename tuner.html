@@ -156,6 +156,10 @@
       <label class="switch"><input type="checkbox" id="ignore_blinks"> Ignore blinks</label>
       <span class="hint" style="margin:0">Stops the start of a normal blink from flashing passthrough. Turn off if real squints get missed.</span>
     </div>
+    <div class="row">
+      <label class="switch"><input type="checkbox" id="autostart"> Start automatically</label>
+      <span class="hint" style="margin:0">Run SquintThru by itself every time your Steam Frame starts.</span>
+    </div>
     <div class="buttons" style="margin-top:14px">
       <button class="btn" id="reset">Reset to defaults</button>
     </div>
@@ -249,6 +253,7 @@ $("enabled").addEventListener("change", (e) => change("enabled", e.target.checke
 document.querySelectorAll(".seg").forEach((seg) => seg.addEventListener("click", (e) => {
   if (e.target.dataset.v) change(seg.dataset.key, e.target.dataset.v);
 }));
+$("autostart").addEventListener("change", (e) => post("/autostart", { on: e.target.checked }));
 $("flip").onclick = () => post("/flip");
 $("reset").onclick = () => { lastEdit = 0; post("/reset"); };
 
@@ -259,6 +264,7 @@ function place(el, from, to) {
 
 function render(live) {
   if (!settings) return;
+  if (live) $("autostart").checked = live.autostart;
   for (const [k] of TIMING) {
     if (document.activeElement !== $("s_" + k)) $("s_" + k).value = settings[k];
     $("o_" + k).textContent = settings[k] || k === "min_on" ? Math.round(settings[k] * 1000) + " ms" : "Instant";

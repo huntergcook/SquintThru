@@ -103,6 +103,7 @@ Eye frames arrive about every 17 ms. At Instant, the delay you feel comes down t
 - **Squint eye**: the eye you squint with.
 - **Click sound**: plays Steam's button click each time passthrough switches. On by default. Turn it off for silent peeking.
 - **Ignore blinks**: stops the start of a normal blink from flashing passthrough. Off by default, because when you squint hard, for example during a PCVR game, your other eye can close too and the guard undoes the squint. Turn it on if blinks flash passthrough.
+- **Start automatically**: runs SquintThru by itself every time your Steam Frame starts. On after installing. Updating keeps your choice, and turning it off doesn't stop the copy that's running now.
 - **Reset to defaults**: puts every setting back to how it started.
 
 ### Commands
@@ -112,6 +113,7 @@ Eye frames arrive about every 17 ms. At Instant, the delay you feel comes down t
 | `squintthru` | Open the app (starts SquintThru if it isn't running) |
 | `squintthru status` | Check whether it's running |
 | `squintthru start` / `stop` / `restart` | Control the background service |
+| `squintthru autostart on` / `off` / `status` | Same as the **Start automatically** switch |
 | `squintthru log` | Watch the log: every squint, release and problem |
 | `squintthru stats` | Measure what SquintThru costs on your headset (see [Battery](#battery)) |
 | `squintthru uninstall` | Remove SquintThru |

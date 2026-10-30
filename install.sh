@@ -65,20 +65,22 @@ AUTOSTART="${XDG_CONFIG_HOME:-$HOME/.config}/autostart/squintthru.desktop"
 
 say() { printf '\033[1m%s\033[0m\n' "$*"; }
 
-# The background service runs under your user's systemd. Shells that don't carry the
-# desktop session's environment can't reach it ("Failed to connect to user scope bus"),
-# so point them at the session the usual way before giving up on it.
-export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-if [[ -z "${DBUS_SESSION_BUS_ADDRESS:-}" && -S "$XDG_RUNTIME_DIR/bus" ]]; then
-  export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
-fi
-user_systemd() { systemctl --user show-environment >/dev/null 2>&1; }
+# The background service runs under your user's systemd. The desktop session can point
+# XDG_RUNTIME_DIR at its own folder, and shells may not set it at all, which makes systemd
+# look missing ("Failed to connect to user scope bus"). Only systemctl gets the real one:
+# the app window still needs the session's own.
+sd() {
+  local dir="${XDG_RUNTIME_DIR:-}"
+  [[ -S "$dir/systemd/private" ]] || dir="/run/user/$(id -u)"
+  XDG_RUNTIME_DIR="$dir" systemctl --user "$@"
+}
+user_systemd() { sd show-environment >/dev/null 2>&1; }
 
 if [[ "${1:-}" == "--uninstall" ]]; then
-  systemctl --user disable --now "$UNIT" 2>/dev/null || true
+  sd disable --now "$UNIT" 2>/dev/null || true
   pkill -f "python3 -u $HERE/squint.py" 2>/dev/null || true
   rm -f "$UNIT_DIR/$UNIT" "$APPS/squintthru.desktop" "$BIN/squintthru" "$AUTOSTART"
-  systemctl --user daemon-reload 2>/dev/null || true
+  sd daemon-reload 2>/dev/null || true
   say "SquintThru removed."
   echo "Settings are still in ~/.config/squintthru. Steam debugging is still on;"
   echo "to turn it off, delete $HOME/.local/share/Steam/$CEF_FLAG and restart Steam."
@@ -116,9 +118,12 @@ pkill -f "python3 -u $HERE/squint.py" 2>/dev/null || true
 
 mkdir -p "$APPS" "$BIN"
 
+# An update keeps the choice made with the app's Start automatically switch.
+keep_off=0
+if [[ -e "$BIN/squintthru" ]] && ! "$HERE/squintthru" autostart status >/dev/null; then keep_off=1; fi
+
 if user_systemd; then
 use_systemd=1
-rm -f "$AUTOSTART"
 mkdir -p "$UNIT_DIR"
 cat >"$UNIT_DIR/$UNIT" <<EOF
 [Unit]
@@ -137,18 +142,6 @@ EOF
 else
 # No reachable systemd user session: start SquintThru when you log in to the desktop instead.
 use_systemd=0
-mkdir -p "$(dirname "$AUTOSTART")"
-cat >"$AUTOSTART" <<EOF
-[Desktop Entry]
-Type=Application
-Name=SquintThru service
-Comment=Starts SquintThru in the background
-Exec="$HERE/squintthru" start
-Icon=$HERE/icon.svg
-Terminal=false
-NoDisplay=true
-X-KDE-autostart-phase=2
-EOF
 fi
 
 cat >"$APPS/squintthru.desktop" <<EOF
@@ -167,10 +160,11 @@ command -v update-desktop-database >/dev/null && update-desktop-database "$APPS"
 ln -sf "$HERE/squintthru" "$BIN/squintthru"
 
 if [[ $use_systemd == 1 ]]; then
-  systemctl --user daemon-reload
-  systemctl --user enable "$UNIT" >/dev/null 2>&1
-  systemctl --user restart "$UNIT"
+  sd daemon-reload
+  [[ $keep_off == 1 ]] || "$HERE/squintthru" autostart on
+  sd restart "$UNIT"
 else
+  [[ $keep_off == 1 ]] || "$HERE/squintthru" autostart on
   "$HERE/squintthru" start >/dev/null
 fi
 
