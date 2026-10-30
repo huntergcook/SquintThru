@@ -1,8 +1,8 @@
 # Turns on Steam Frame passthrough while you squint, and back off when you stop.
-# Squint = the squint eye nearly shut while the other stays mostly open (from
-# calibration: open L1.0/R1.0, squint L~0.85/R~0.03, closed L~0.21/R0.0).
+# Squint = the squint eye nearly shut while the other stays mostly open (measured:
+# open L1.0/R1.0, squint L~0.85/R~0.03, closed L~0.21/R0.0).
 # Serves the SquintThru app page at http://127.0.0.1:8765.
-import json, os, statistics, sys, threading, time
+import json, os, sys, threading, time
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import eyes, roomview
@@ -12,8 +12,6 @@ CONFIG_DIR = os.path.join(os.environ.get("XDG_CONFIG_HOME") or os.path.expanduse
 SETTINGS_FILE = os.path.join(CONFIG_DIR, "settings.json")
 OLD_SETTINGS_FILE = os.path.join(HERE, "settings.json")  # where settings lived before the installer
 PORT = 8765
-CALIB_SETTLE = 0.6   # seconds ignored at the start of each recording while you get into position
-CALIB_SECONDS = 3.0  # seconds recorded after that
 
 DEFAULTS = {
     "enabled": True,
@@ -28,7 +26,7 @@ DEFAULTS = {
     "min_on": 0.02,          # passthrough stays on at least this long once triggered
     "ignore_blinks": False,  # don't let the start of a blink count as a squint
     "click_sound": False,    # play Steam's button click when passthrough switches
-    "double_wink": False,    # two quick winks of one eye toggle passthrough
+    "double_wink": False,    # two quick winks of one eye turn squint detection on or off
     "wink_eye": "right",     # "left", "right" or "either"
     "wink_below": 0.35,      # winking eye below this counts as shut
     "wink_max": 0.4,         # longest a single wink can last, in seconds
@@ -70,6 +68,14 @@ def save_settings():
     os.replace(tmp, SETTINGS_FILE)
 
 settings = load_settings()
+settings_lock = threading.Lock()   # settings is replaced, never edited; this keeps two changes from racing
+
+def change_settings(**changes):
+    global settings
+    with settings_lock:
+        settings = {**settings, **changes}
+        save_settings()
+    return settings
 live = {"l": 0.0, "r": 0.0, "squinting": False, "passthrough": None, "latency_ms": None,
         "eyes": False, "problem": "", "ours": False}
 events = deque(maxlen=12)
@@ -84,7 +90,6 @@ wake = threading.Event()   # set when settings change or the app opens
 
 def app_open():
     return time.monotonic() - app["seen"] < APP_TIMEOUT
-calib = {"phase": None, "start": 0.0, "until": 0.0, "samples": {"open": [], "squint": []}, "message": ""}
 
 def log(*a):
     line = " ".join(map(str, a))
@@ -207,13 +212,17 @@ class Detector:
                 return drop >= BLINK_MIN_DROP and other_drop > BLINK_RATIO * drop
         return False
 
+    def double_winked(self, l, r, now, s):
+        """True on the frame that completes a double wink. Runs even while squint
+        detection is off, since a double wink is how it gets switched back on."""
+        hit = False
+        for w in self.winks:   # update every detector, so none misses a frame
+            if s["wink_eye"] in ("either", ("left", "right")[w.eye]) and w.update((l, r), now, s):
+                hit = True
+        return hit
+
     def update(self, l, r, now, s):
         eye, other = (r, l) if s["squint_eye"] == "right" else (l, r)
-        if s["double_wink"]:
-            for w in self.winks:
-                if s["wink_eye"] in ("either", ("left", "right")[w.eye]) and w.update((l, r), now, s):
-                    log("double wink (" + ("left", "right")[w.eye] + ")")
-                    self.pt.flip(now)
         blinkish = s["ignore_blinks"] and self._looks_like_blink(eye, other, now)
         self.history.append((now, eye, other))
         if self.blink and eye > s["release_above"]:
@@ -274,41 +283,6 @@ class WinkDetector:
         self.last_wink = now
         return False
 
-def pct(values, p):
-    values = sorted(values)
-    return values[min(len(values) - 1, int(len(values) * p))]
-
-def apply_calibration():
-    """Sets thresholds from the open and squint recordings. Returns a message."""
-    global settings
-    op, sq = calib["samples"]["open"], calib["samples"]["squint"]
-    if len(op) < 30 or len(sq) < 30:
-        return "Not enough eye data. Is eye tracking running? Try again."
-    drop = [statistics.median(x[i] for x in op) - statistics.median(x[i] for x in sq) for i in (0, 1)]
-    e = 0 if drop[0] > drop[1] else 1   # the eye that closes more is the squint eye
-    o = 1 - e
-    e_open, e_sq = pct([x[e] for x in op], 0.1), pct([x[e] for x in sq], 0.9)
-    gap = e_open - e_sq
-    if gap < 0.1:
-        return "Squinting and open eyes looked almost the same. Try a firmer squint."
-    o_sq_lo, o_sq_hi = pct([x[o] for x in sq], 0.1), pct([x[o] for x in sq], 0.9)
-    o_open = pct([x[o] for x in op], 0.1)
-    new = dict(settings)
-    new.update({
-        "squint_eye": "left" if e == 0 else "right",
-        # Trigger early in the squint (60% of the way from your squint to open) for speed.
-        "squint_below": round(e_sq + gap * 0.6, 2),
-        "release_above": round(e_sq + gap * 0.8, 2),
-        "other_min": round(max(0.0, o_sq_lo - 0.15), 2),
-        # A gap between the other eye's squint and open readings lets winks be ignored.
-        "other_max": round((o_sq_hi + o_open) / 2, 2) if o_open - o_sq_hi > 0.05 else 1.0,
-    })
-    settings = new
-    save_settings()
-    name = "Left" if e == 0 else "Right"
-    wink = "" if new["other_max"] < 1.0 else " Your other eye barely moves, so winks will count too."
-    return f"Done. {name} eye is your squint eye.{wink}"
-
 STATIC = {
     "/": ("tuner.html", "text/html; charset=utf-8"),
     "/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json"),
@@ -351,12 +325,8 @@ class Handler(BaseHTTPRequestHandler):
                 wake.set()          # resume eye reading if it was paused
                 if pt:
                     pt.app_opened() # show the current passthrough state right away
-            total = CALIB_SETTLE + CALIB_SECONDS
-            left = max(0.0, calib["until"] - time.monotonic()) if calib["phase"] else 0.0
             self._send(json.dumps({**live, "settings": settings, "defaults": DEFAULTS,
-                                   "events": list(events),
-                                   "calib": {"phase": calib["phase"], "left": left,
-                                             "seconds": total, "message": calib["message"]}}).encode())
+                                   "events": list(events)}).encode())
         else:
             self.send_error(404)
 
@@ -375,33 +345,15 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(400)
             return
         if self.path == "/settings":
-            new = dict(settings)
-            for k, v in body.items():
-                if k in DEFAULTS and type(v) in (type(DEFAULTS[k]), int):
-                    new[k] = type(DEFAULTS[k])(v)
-            settings = new
-            save_settings()
+            change_settings(**{k: type(DEFAULTS[k])(v) for k, v in body.items()
+                               if k in DEFAULTS and type(v) in (type(DEFAULTS[k]), int)})
         elif self.path == "/reset":
-            settings = dict(DEFAULTS)
-            try: os.remove(SETTINGS_FILE)
-            except OSError: pass
+            with settings_lock:
+                settings = dict(DEFAULTS)
+                try: os.remove(SETTINGS_FILE)
+                except OSError: pass
         elif self.path == "/flip":
             pt.flip()
-        elif self.path == "/calibrate":
-            phase = body.get("phase")
-            if phase in ("open", "squint"):
-                calib["samples"][phase] = []
-                calib["message"] = ""
-                calib["start"] = time.monotonic() + CALIB_SETTLE
-                calib["until"] = calib["start"] + CALIB_SECONDS
-                calib["phase"] = phase
-            elif phase == "apply":
-                calib["phase"] = None
-                calib["message"] = apply_calibration()
-                log("calibration:", calib["message"])
-            else:
-                calib["phase"] = None
-                calib["message"] = ""
         wake.set()
         self._send(b"{}")
 
@@ -427,14 +379,14 @@ def main():
     log(f"watching for squints; app at http://127.0.0.1:{PORT}")
     skip = False
     for l, r in eyes.stream(log):
-        if not settings["enabled"] and not app_open():
-            # Switched off and nobody's watching the bars: stop asking for eye data
-            # until it's switched back on or the app opens.
+        if not settings["enabled"] and not settings["double_wink"] and not app_open():
+            # Switched off, no double wink to switch it back on, and nobody's watching
+            # the bars: stop asking for eye data until something changes.
             detector.reset(settings)
             log("SquintThru is off; eye tracking paused")
             while True:
                 wake.clear()
-                if settings["enabled"] or app_open():
+                if settings["enabled"] or settings["double_wink"] or app_open():
                     break
                 wake.wait()
             log("eye tracking resumed")
@@ -445,15 +397,12 @@ def main():
             continue
         live["l"], live["r"], live["eyes"] = l, r, True
         now = time.monotonic()
-        if calib["phase"]:
-            if now >= calib["until"]:
-                calib["phase"] = None
-            elif now >= calib["start"]:
-                calib["samples"][calib["phase"]].append((l, r))
         s = settings
-        # Calibrating means squinting on purpose, so don't act on it.
-        if not s["enabled"] or calib["phase"]:
-            detector.reset(s)
+        if s["double_wink"] and detector.double_winked(l, r, now, s):
+            s = change_settings(enabled=not s["enabled"])
+            log("double wink: squinting " + ("on" if s["enabled"] else "off"))
+        if not s["enabled"]:
+            detector.reset(s)   # also turns off passthrough that a squint turned on
             continue
         detector.update(l, r, now, s)
 

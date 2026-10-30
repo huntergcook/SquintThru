@@ -19,7 +19,7 @@ You can do the whole install while wearing your Steam Frame. It's one command, w
    ```
 
 4. **The SquintThru app opens when it's done.** If the installer asks you to, **restart your Steam Frame once**. That turns on the Steam setting SquintThru needs to press the Room View button, and you only do it the first time.
-5. **Calibrate** in the app (see [Calibrate](#calibrate)), then try a squint.
+5. **Set up your squint** in the app by dragging three lines to fit your eyes (see [Set up your squint](#set-up-your-squint)). It takes about a minute.
 
 That's it. From now on SquintThru starts by itself every time the Frame starts, with your settings loaded. You don't need to open the app again unless you want to change something.
 
@@ -71,20 +71,19 @@ If something is wrong, for example Steam isn't ready, a red message under the to
 
 <img src="docs/header-problem.png" width="420" alt="Red message: Steam's debug port isn't open yet. Restart your Steam Frame once after installing.">
 
-### Calibrate
+### Set up your squint
 
-<img src="docs/calibrate.png" width="420" alt="Calibration in progress: Step 1 of 3, Look ahead with your eyes relaxed, with a progress bar">
+<img src="docs/eyes.png" width="420" alt="Set up your squint: step-by-step instructions above two eye bars. The left (other) eye bar is at 0.88, inside the green band. The right (squint) eye bar is at 0.31, below the orange line, and its status reads Below the orange line: squinting">
 
-Calibration sets the lines for you in about ten seconds. It records your relaxed eyes, gives you a moment to get ready, then records you squinting. It ignores the first 0.6 s of each recording while you're still getting into position. Afterward, it picks your squint eye and places the lines. Squint a few times and check that the **Squinting** chip lights up. If it doesn't, drag the lines as described below.
+Everyone's eyes squint a little differently, so you set where a squint begins by dragging lines on two bars. Each blue bar shows how open that eye is right now, from 0 (shut) to 1 (wide open), and moves as you blink and squint. The handles under a bar move its lines.
 
-### Your eyes
+1. **Squint** and watch your squint eye's bar drop. Drag the **orange** handle so its line sits a little above where the bar drops to. A squint starts when the bar goes below this line. Higher up, toward open, triggers earlier in the squint. Too high, and narrowing your eyes at something in a game will trigger it.
+2. **Relax your eyes.** Drag the **purple** handle so its line sits a little below where the bar rests. A squint ends when the bar rises above this line. Keeping a gap between the orange and purple lines stops passthrough from flickering when your eye hovers near one line.
+3. **Squint again** and watch your other eye's bar. Drag the **green** handles so the band covers where that bar sits while you squint. A squint only counts while the other eye is inside the band. That's how SquintThru tells a one-eye squint from a blink, where both eyes close. Bringing the top of the band below where your other eye rests when wide open stops winks from counting too, because during a wink the other eye stays wide open.
 
-<img src="docs/eyes.png" width="420" alt="Your eyes: the left eye bar at 0.88 inside its green band, and the right eye bar at 0.31 inside the orange squint area">
+Then squint a few times. The **Squinting** chip at the top should light up every time, and stay off when you blink or look around. Under each bar, a line of text says where it is right now, for example **Below the orange line: squinting** or **Outside the green band: a squint won't count**, so you can see which line to move.
 
-Each blue bar shows how open that eye is right now, from 0 (shut) to 1 (wide open). Drag the handle under a bar to move its line.
-
-- **Squint eye**: a squint starts when this eye goes below the orange **Squinting below** line, and ends when it rises above the purple **Open again above** line. Keeping a gap between the two lines stops passthrough from flickering at the edge. Moving the orange line up, toward open, makes it trigger earlier in the squint.
-- **Other eye**: it must stay inside the green band while you squint. That's how SquintThru tells a one-eye squint from a blink, where both eyes close. Lowering the top of the band stops winks from counting, because during a wink the other eye stays wide open.
+To squint with your left eye instead, switch **Squint eye** in [Options](#options). The orange and purple lines move to the left bar.
 
 ### Timing
 
@@ -100,16 +99,16 @@ Eye frames arrive about every 17 ms. At Instant, the delay you feel comes down t
 
 <img src="docs/double-wink.png" width="420" alt="Double wink turned on, with the wink eye set to Right and its timing sliders">
 
-Wink one eye twice quickly to switch passthrough on or off and leave it that way, for longer interruptions. Choose which eye's winks count, how short a wink must be, how close together the two winks must be, and how shut the eye must be.
+Wink one eye twice quickly to turn squinting on or off, the same as the **On** box at the top. Use it to keep squints from switching passthrough during a game where you squint a lot, then turn squinting back on without taking off the headset. Choose which eye's winks count, how short a wink must be, how close together the two winks must be, and how shut the eye must be. Winks only count while the other eye stays open, so blinks never toggle it.
 
 While double wink is on, a squint has to last longer than the longest wink before it counts, so squints get a little slower.
 
 ### Options
 
-<img src="docs/options.png" width="420" alt="Options: Mode Hold, Squint eye Right, Click sound off, Ignore blinks on, and Reset to defaults">
+<img src="docs/options.png" width="420" alt="Options: Mode Hold, Squint eye Right, Click sound off, Ignore blinks off, and Reset to defaults">
 
 - **Mode**: **Hold** keeps passthrough on while you squint. **Toggle** makes each squint switch it on or off.
-- **Squint eye**: the eye you squint with. Calibration sets this for you.
+- **Squint eye**: the eye you squint with.
 - **Click sound**: plays Steam's button click each time passthrough switches. Off by default, so peeking is silent.
 - **Ignore blinks**: stops the start of a normal blink from flashing passthrough. Off by default, because when you squint hard, for example during a PCVR game, your other eye can close too and the guard undoes the squint. Turn it on if blinks flash passthrough.
 - **Reset to defaults**: puts every setting back to how it started.
@@ -146,7 +145,7 @@ SquintThru only does work when it has to:
 
 - **While you're using it**, it looks at each eye frame as it arrives, about 60 a second, because that's what makes it instant. The work per frame is about 2 µs: three calls to read the frame and ask for the next one, and a few comparisons. Nothing else runs in the background.
 - **It leaves Steam alone.** It only talks to Steam to switch passthrough. Checking whether the connection is still alive costs Steam nothing, because SquintThru just looks at its own socket every 30 seconds.
-- **Switched off**, with the **On** box unchecked, it stops reading your eyes entirely. It uses no CPU and never wakes up until you switch it back on.
+- **Switched off**, with the **On** box unchecked, it stops reading your eyes entirely. It uses no CPU and never wakes up until you switch it back on. With **Double wink** on, it keeps reading your eyes while switched off, because that's how it sees the double wink that turns it back on, but it does nothing else.
 - **When the headset is idle** and eye tracking stops sending frames, it waits 5 seconds at a time instead of 1. A new eye frame still wakes it instantly.
 - **The settings app** only runs while its window is visible. Hide or minimize the window and it goes quiet. Three seconds later, SquintThru also stops the extra work it does for the app, such as refreshing the passthrough state.
 
@@ -155,7 +154,7 @@ Measured with a simulated eye tracker at 60 frames a second, before and after th
 | Situation | Wakeups per second | Calls into Steam |
 |---|---|---|
 | Normal use, app closed | 62 → 58 (one per eye frame) | 30 a minute → none |
-| Switched off | 61 → **0** | 30 a minute → none |
+| Switched off (double wink off) | 61 → **0** | 30 a minute → none |
 | Headset idle (no eye frames) | 4 → **0.2** | 30 a minute → none |
 | Settings app open | about 115 (unchanged) | 30 a minute (unchanged) |
 
@@ -187,7 +186,7 @@ Settings are saved in `~/.config/squintthru/settings.json` and loaded every time
 | `min_on` | 20 ms | Once on, passthrough stays on at least this long (0–200 ms) |
 | `ignore_blinks` | off | Don't let the start of a blink count as a squint |
 | `click_sound` | off | Play Steam's button click each time passthrough switches |
-| `double_wink` | off | Two quick winks of `wink_eye` switch passthrough |
+| `double_wink` | off | Two quick winks of `wink_eye` turn squinting on or off |
 | `wink_eye` / `wink_below` / `wink_max` / `wink_gap` | right / 0.35 / 0.4 s / 0.6 s | Double-wink tuning |
 
 ## How it works
@@ -216,6 +215,6 @@ Check the red message in the app, or run `squintthru log`.
 - **"Steam's debug port isn't open yet"**: restart your Steam Frame once after installing. See [Steam debugging](#steam-debugging).
 - **"SteamVR dashboard bar not found"**: start SteamVR. SquintThru keeps retrying.
 - **"waiting for eye tracking"**: eye tracking isn't running yet. SquintThru connects as soon as it is.
-- **Squinting does nothing**: if the app shows the "Passthrough is already on" warning, turn passthrough off with the green button. If the log says "that was a blink; undoing", turn off **Ignore blinks**. Otherwise, watch the **Squinting** chip while you squint and drag the lines in **Your eyes** until it lights up.
+- **Squinting does nothing**: if the app shows the "Passthrough is already on" warning, turn passthrough off with the green button. If the log says "that was a blink; undoing", turn off **Ignore blinks**. Otherwise, watch the **Squinting** chip while you squint and drag the lines in [Set up your squint](#set-up-your-squint) until it lights up.
 - **Passthrough flashes when you blink**: turn on **Ignore blinks**, or raise the bottom of the green band on your other eye.
 - **The app opens in a browser tab, not its own window**: install a Chromium-based browser, such as Chromium from Flatpak.

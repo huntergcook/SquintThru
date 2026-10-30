@@ -76,12 +76,16 @@
   .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 600; }
   .switch input { width: 22px; height: 22px; accent-color: var(--on); }
 
-  .calib-step { font-size: 22px; font-weight: 600; margin: 4px 0 10px; }
-  .progress { height: 10px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line);
-              overflow: hidden; margin-bottom: 12px; }
-  .progress div { height: 100%; width: 0; background: var(--accent); }
-  .msg { font-weight: 600; margin: 0 0 12px; }
-  .msg.bad { color: var(--warn); }
+  ol.steps { margin: 0 0 12px; padding-left: 22px; font-size: 14px; color: var(--dim); }
+  ol.steps li { margin: 4px 0; }
+  ol.steps b, .hint b { color: var(--text); }
+  .k-squint { color: var(--squint); font-weight: 600; }
+  .k-release { color: var(--release); font-weight: 600; }
+  .k-band { color: var(--band-edge); font-weight: 600; }
+  .eye-status { grid-column: 2; font-size: 13px; font-weight: 600; margin: 4px 0 0; color: var(--dim); }
+  .eye-status.hit { color: var(--squint); }
+  .eye-status.ok { color: var(--band-edge); }
+  .eye-status.bad { color: var(--warn); }
   ul.log { list-style: none; margin: 0; padding: 0; font: 14px/1.6 ui-monospace, monospace; color: var(--dim); }
   details summary { cursor: pointer; color: var(--dim); font-size: 14px; }
   .error { color: var(--warn); font-weight: 600; }
@@ -113,23 +117,15 @@
   <p class="error" id="err" hidden>SquintThru isn't running. Open it from your app menu, or run <code>squintthru start</code>.</p>
   <p class="error" id="problem" hidden></p>
 
-  <section id="calib">
-    <h2>Calibrate</h2>
-    <p class="hint">Records your open and squinting eyes for a few seconds each, then sets the lines below for you.</p>
-    <div id="calibIdle">
-      <p class="msg" id="calibMsg" hidden></p>
-      <button class="btn primary" id="calibStart">Start calibration</button>
-    </div>
-    <div id="calibRun" hidden>
-      <div class="calib-step" id="calibStep"></div>
-      <div class="progress"><div id="calibBar"></div></div>
-      <button class="btn" id="calibCancel">Cancel</button>
-    </div>
-  </section>
-
   <section>
-    <h2>Your eyes</h2>
-    <p class="hint">The blue bar is how open each eye is right now. Drag the handle under a bar to move the line above it.</p>
+    <h2>Set up your squint</h2>
+    <p class="hint">Each blue bar shows how open that eye is right now: empty is shut, full is wide open. Drag the handles under a bar to move its lines. To set it up:</p>
+    <ol class="steps">
+      <li><b>Squint</b> and watch your squint eye's bar drop. Drag the <span class="k-squint">orange</span> handle so its line sits a little above where the bar drops to.</li>
+      <li><b>Relax your eyes.</b> Drag the <span class="k-release">purple</span> handle so its line sits a little below where the bar rests. Passthrough turns off when the bar rises past it.</li>
+      <li><b>Squint again</b> and watch your other eye's bar. Drag the <span class="k-band">green</span> handles so the band covers where that bar sits while you squint.</li>
+    </ol>
+    <p class="hint">Then squint a few times. <b>Squinting</b> at the top should light up every time, and stay off when you blink or look around. The line under each bar tells you where it is right now.</p>
     <div id="eyes"></div>
   </section>
 
@@ -140,9 +136,9 @@
 
   <section>
     <h2>Double wink</h2>
-    <p class="hint">Wink one eye twice quickly to switch passthrough on or off. Blinks with both eyes don't count.</p>
+    <p class="hint">Wink one eye twice quickly to turn squinting on or off, the same as the <b>On</b> box at the top. Use it to stop squints from switching passthrough during a game where you squint a lot, without taking off the headset. Blinks with both eyes don't count.</p>
     <div class="row">
-      <label class="switch"><input type="checkbox" id="double_wink"> Double wink switches passthrough</label>
+      <label class="switch"><input type="checkbox" id="double_wink"> Double wink turns squinting on and off</label>
     </div>
     <div id="winkBody">
       <div class="row">
@@ -213,13 +209,12 @@ const WINK = [
 const SLIDERS = [...TIMING.map((t) => t.length > 6 ? t : [...t, "s"]), ...WINK];
 // Per eye, two handles. Which settings they drive depends on the eye's role.
 const KNOBS = {
-  squint: [["squint_below", "Squinting below", "var(--squint)"],
-           ["release_above", "Open again above", "var(--release)"]],
-  other:  [["other_min", "Band from", "var(--band-edge)"],
-           ["other_max", "Band to", "var(--band-edge)"]],
+  squint: [["squint_below", "Orange line: a squint starts when the bar drops below it", "var(--squint)"],
+           ["release_above", "Purple line: the squint ends when the bar rises above it", "var(--release)"]],
+  other:  [["other_min", "Bottom of the green band", "var(--band-edge)"],
+           ["other_max", "Top of the green band: lower it so winks don't count", "var(--band-edge)"]],
 };
 let settings = null, pending = {}, timer = null, lastEdit = 0;
-let calibFlow = null; // {step, t0} while the page drives calibration
 
 const $ = (id) => document.getElementById(id);
 
@@ -240,6 +235,7 @@ $("eyes").innerHTML = ["l", "r"].map((e) => `
       <div class="mark" id="m0_${e}"></div><div class="mark" id="m1_${e}"></div>
     </div>
     <span class="val" id="val_${e}"></span>
+    <div class="eye-status" id="st_${e}"></div><span></span>
     ${[0, 1].map((i) => `
       <div class="knob"><input type="range" id="k${i}_${e}" min="0" max="1" step="0.01"></div>
       <span class="knob-label" id="kv${i}_${e}"></span>
@@ -281,46 +277,6 @@ document.querySelectorAll(".seg").forEach((seg) => seg.addEventListener("click",
 $("flip").onclick = () => post("/flip");
 $("reset").onclick = () => { lastEdit = 0; post("/reset"); };
 
-// Calibration: open eyes, a short pause to get ready, then squint.
-const STEPS = [
-  { text: "Look ahead with your eyes relaxed", phase: "open" },
-  { text: "Get ready to squint…", pause: 2 },
-  { text: "Squint and hold it", phase: "squint" },
-];
-async function runStep(i) {
-  if (!calibFlow) return;
-  if (i >= STEPS.length) {
-    await post("/calibrate", { phase: "apply" });
-    calibFlow = null; lastEdit = 0;
-    return;
-  }
-  const step = STEPS[i];
-  calibFlow = { step: i, t0: Date.now(), length: (step.pause || 3) * 1000 };
-  if (step.phase) await post("/calibrate", { phase: step.phase });
-  else setTimeout(() => runStep(i + 1), step.pause * 1000);
-}
-$("calibStart").onclick = () => { calibFlow = {}; runStep(0); };
-$("calibCancel").onclick = () => { calibFlow = null; post("/calibrate", { phase: "cancel" }); };
-
-function renderCalib(c) {
-  $("calibIdle").hidden = !!calibFlow;
-  $("calibRun").hidden = !calibFlow;
-  if (calibFlow && calibFlow.length) {
-    const step = STEPS[calibFlow.step];
-    $("calibStep").textContent = `Step ${calibFlow.step + 1} of 3: ${step.text}`;
-    const done = step.phase ? 1 - c.left / c.seconds : (Date.now() - calibFlow.t0) / calibFlow.length;
-    $("calibBar").style.width = Math.min(100, done * 100) + "%";
-    // The server ends a recording on its own; move on once it has.
-    if (step.phase && !c.phase && Date.now() - calibFlow.t0 > 500 && !calibFlow.advanced) {
-      calibFlow.advanced = true;
-      runStep(calibFlow.step + 1);
-    }
-  }
-  $("calibMsg").hidden = !c.message;
-  $("calibMsg").textContent = c.message;
-  $("calibMsg").classList.toggle("bad", !c.message.startsWith("Done"));
-}
-
 function place(el, from, to) {
   el.style.left = from * 100 + "%";
   if (to !== undefined) el.style.width = Math.max(0, to - from) * 100 + "%";
@@ -357,16 +313,25 @@ function render(live) {
       $(`kc${i}_${e}`).textContent = label;
     });
   }
-  $("kc0_" + (settings.squint_eye === "right" ? "r" : "l")).textContent =
-    "Squinting below: the shaded area is what counts as a squint";
-  $("kc0_" + (settings.squint_eye === "right" ? "l" : "r")).textContent =
-    "Band from / to: this eye must stay inside the green band";
-  $("kc1_" + (settings.squint_eye === "right" ? "l" : "r")).textContent = "";
 
   if (!live) return;
   for (const e of ["l", "r"]) {
-    $("fill_" + e).style.width = live[e] * 100 + "%";
-    $("val_" + e).textContent = live[e].toFixed(2);
+    const v = live[e];
+    $("fill_" + e).style.width = v * 100 + "%";
+    $("val_" + e).textContent = v.toFixed(2);
+    // Say in words where the bar is relative to the lines, so it's clear what to drag.
+    let text, cls;
+    if (roleOf(e) === "squint") {
+      if (v < settings.squint_below) [text, cls] = ["Below the orange line: squinting", "hit"];
+      else if (v > settings.release_above) [text, cls] = ["Above the purple line: open", ""];
+      else [text, cls] = ["Between the lines", ""];
+    } else if (v > settings.other_min && v <= settings.other_max) {
+      [text, cls] = ["Inside the green band: a squint can count", "ok"];
+    } else {
+      [text, cls] = ["Outside the green band: a squint won't count", "bad"];
+    }
+    $("st_" + e).textContent = text;
+    $("st_" + e).className = "eye-status " + cls;
   }
   $("squintChip").textContent = live.squinting ? "Squinting" : "Not squinting";
   $("squintChip").classList.toggle("active", live.squinting);
@@ -380,7 +345,6 @@ function render(live) {
   $("problem").textContent = live.problem || "";
   const logHTML = live.events.map((e) => `<li>${e.replace(/</g, "&lt;")}</li>`).join("");
   if (logHTML !== lastLog) $("log").innerHTML = lastLog = logHTML;
-  renderCalib(live.calib);
 }
 
 // Poll only while the window is visible. When it's hidden or minimized, the page goes
