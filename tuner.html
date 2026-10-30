@@ -135,24 +135,6 @@
   </section>
 
   <section>
-    <h2>Double wink</h2>
-    <p class="hint">Wink one eye twice quickly to turn squinting on or off, the same as the <b>On</b> box at the top. Use it to stop squints from switching passthrough during a game where you squint a lot, without taking off the headset. You hear the Room View tone once when squinting turns on, and twice when it turns off. Blinks with both eyes don't count.</p>
-    <div class="row">
-      <label class="switch"><input type="checkbox" id="double_wink"> Double wink turns squinting on and off</label>
-    </div>
-    <div id="winkBody">
-      <div class="row">
-        <span>Wink eye</span>
-        <div class="seg" data-key="wink_eye">
-          <button data-v="left">Left</button><button data-v="right">Right</button><button data-v="either">Either</button>
-        </div>
-      </div>
-      <div id="winkSliders"></div>
-      <p class="hint">While this is on, a squint has to last longer than the longest wink before it counts.</p>
-    </div>
-  </section>
-
-  <section>
     <h2>Options</h2>
     <div class="row">
       <span>Mode<span class="hint" style="display:block;margin:0">Hold: on while squinting. Toggle: each squint switches it.</span></span>
@@ -201,12 +183,6 @@ const TIMING = [
   ["release_hold", "Open for", 0, 0.1, 0.001, "How long your eye must be open again before it turns off. 0 is fastest.", "ms"],
   ["min_on", "Stay on at least", 0, 0.2, 0.001, "Stops flicker when you squint again quickly. 0 turns it off as soon as your eye opens.", "ms"],
 ];
-const WINK = [
-  ["wink_max", "Longest wink", 0.1, 1, 0.05, "A wink longer than this doesn't count.", "s"],
-  ["wink_gap", "Time between winks", 0.2, 1.5, 0.05, "The second wink must come within this time.", "s"],
-  ["wink_below", "Shut below", 0.05, 0.8, 0.01, "How shut the eye must be to count as a wink.", ""],
-];
-const SLIDERS = [...TIMING.map((t) => t.length > 6 ? t : [...t, "s"]), ...WINK];
 // Per eye, two handles. Which settings they drive depends on the eye's role.
 const KNOBS = {
   squint: [["squint_below", "Orange line: a squint starts when the bar drops below it", "var(--squint)"],
@@ -225,7 +201,6 @@ const sliderHTML = ([k, label, min, max, step, help]) => `
     <small>${help}</small>
   </div>`;
 $("sliders").innerHTML = TIMING.map(sliderHTML).join("");
-$("winkSliders").innerHTML = WINK.map(sliderHTML).join("");
 
 $("eyes").innerHTML = ["l", "r"].map((e) => `
   <div class="eye">
@@ -256,8 +231,8 @@ function change(k, v) {
   timer = setTimeout(() => { post("/settings", pending); pending = {}; }, 120);
 }
 
-for (const [k] of SLIDERS) $("s_" + k).addEventListener("input", (e) => change(k, parseFloat(e.target.value)));
-for (const k of ["double_wink", "click_sound", "ignore_blinks"])
+for (const [k] of TIMING) $("s_" + k).addEventListener("input", (e) => change(k, parseFloat(e.target.value)));
+for (const k of ["click_sound", "ignore_blinks"])
   $(k).addEventListener("change", (e) => change(k, e.target.checked));
 for (const e of ["l", "r"]) for (const i of [0, 1]) {
   $(`k${i}_${e}`).addEventListener("input", (ev) => {
@@ -284,14 +259,12 @@ function place(el, from, to) {
 
 function render(live) {
   if (!settings) return;
-  for (const [k, , , , , , unit] of SLIDERS) {
+  for (const [k] of TIMING) {
     if (document.activeElement !== $("s_" + k)) $("s_" + k).value = settings[k];
-    $("o_" + k).textContent = unit === "ms" ? (settings[k] || k === "min_on" ? Math.round(settings[k] * 1000) + " ms" : "Instant")
-      : Number(settings[k]).toFixed(2) + (unit ? " " + unit : "");
+    $("o_" + k).textContent = settings[k] || k === "min_on" ? Math.round(settings[k] * 1000) + " ms" : "Instant";
   }
   $("enabled").checked = settings.enabled;
-  for (const k of ["double_wink", "click_sound", "ignore_blinks"]) $(k).checked = settings[k];
-  $("winkBody").hidden = !settings.double_wink;
+  for (const k of ["click_sound", "ignore_blinks"]) $(k).checked = settings[k];
   document.querySelectorAll(".seg").forEach((seg) => seg.querySelectorAll("button").forEach((b) =>
     b.classList.toggle("sel", settings[seg.dataset.key] === b.dataset.v)));
 

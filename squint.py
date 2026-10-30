@@ -26,13 +26,7 @@ DEFAULTS = {
     "min_on": 0.02,          # passthrough stays on at least this long once triggered
     "ignore_blinks": False,  # don't let the start of a blink count as a squint
     "click_sound": False,    # play Steam's button click when passthrough switches
-    "double_wink": False,    # two quick winks of one eye turn squint detection on or off
-    "wink_eye": "right",     # "left", "right" or "either"
-    "wink_below": 0.35,      # winking eye below this counts as shut
-    "wink_max": 0.4,         # longest a single wink can last, in seconds
-    "wink_gap": 0.6,         # most time allowed between the two winks
 }
-WINK_OTHER_MIN = 0.6  # the other eye must stay this open, so blinks never count as winks
 
 # Blink guard. In a blink both eyes close together; in a squint the other eye
 # barely moves. Over the last BLINK_WINDOW seconds, if the squint eye fell by at
@@ -103,10 +97,9 @@ class Passthrough:
     def __init__(self, rv):
         self.rv = rv
         self.want = None   # hold mode: True/False
-        self.flips = 0     # toggle mode, double wink and the page button
+        self.flips = 0     # toggle mode and the page button
         self.ours = False  # True only if we turned it on (hold mode)
         self.asked = None  # when the newest request was made, for the response time
-        self.tones = 0     # Room View tones to play, to confirm a double wink
         self.problem = None
         self.cv = threading.Condition()
         threading.Thread(target=self._run, daemon=True).start()
@@ -120,11 +113,6 @@ class Passthrough:
         with self.cv:
             self.flips += 1
             self.asked = at or time.monotonic()
-            self.cv.notify()
-
-    def tone(self, times):
-        with self.cv:
-            self.tones = times
             self.cv.notify()
 
     def app_opened(self):
@@ -148,25 +136,21 @@ class Passthrough:
                 log("squint, passthrough already on; leaving it alone")
         elif want is False:
             if self.ours:
-                self.rv.set(False, quiet)
+                was = self.rv.set(False, quiet)
                 state = "off"
-                log("released -> passthrough off")
+                log("released -> passthrough off" if was == "on" else "released, passthrough already off")
             self.ours = False
         return state
 
     def _run(self):
         while True:
             with self.cv:
-                if self.want is None and not self.flips and not self.tones:
+                if self.want is None and not self.flips:
                     self.cv.wait(timeout=2 if app_open() else KEEPALIVE)
-                want, flips, asked, tones = self.want, self.flips, self.asked, self.tones
-                self.want, self.flips, self.asked, self.tones = None, 0, None, 0
+                want, flips, asked = self.want, self.flips, self.asked
+                self.want, self.flips, self.asked = None, 0, None
             try:
-                if tones and self.rv.tone(tones) == "unknown":
-                    log("no confirmation tone yet: it's learned from the first squint after Steam starts")
-                if want is None and not flips and tones:
-                    state = None
-                elif want is None and not flips:
+                if want is None and not flips:
                     if app_open():
                         state = self.rv.state()   # refresh what the app shows
                     else:
@@ -197,7 +181,6 @@ class Detector:
         self.since = None       # when the opposite state started
         self.blink = False      # a blink was seen; wait for the eye to reopen
         self.history = deque(maxlen=8)
-        self.winks = [WinkDetector(0), WinkDetector(1)]
 
     def reset(self, s):
         self.since = None
@@ -222,15 +205,6 @@ class Detector:
                 return drop >= BLINK_MIN_DROP and other_drop > BLINK_RATIO * drop
         return False
 
-    def double_winked(self, l, r, now, s):
-        """True on the frame that completes a double wink. Runs even while squint
-        detection is off, since a double wink is how it gets switched back on."""
-        hit = False
-        for w in self.winks:   # update every detector, so none misses a frame
-            if s["wink_eye"] in ("either", ("left", "right")[w.eye]) and w.update((l, r), now, s):
-                hit = True
-        return hit
-
     def update(self, l, r, now, s):
         eye, other = (r, l) if s["squint_eye"] == "right" else (l, r)
         blinkish = s["ignore_blinks"] and self._looks_like_blink(eye, other, now)
@@ -242,8 +216,7 @@ class Detector:
                 self.blink = True
             hit = (not self.blink and eye < s["squint_below"]
                    and s["other_min"] < other <= s["other_max"])
-            # With double wink on, a squint must outlast a wink, or every wink would trigger it.
-            wait = max(s["hold"], s["wink_max"]) if s["double_wink"] else s["hold"]
+            wait = s["hold"]
         else:
             if (s["ignore_blinks"] and now - self.started < BLINK_CANCEL
                     and other < BLINK_OTHER_SHUT):
@@ -263,35 +236,6 @@ class Detector:
             self.since = now
         if now - self.since >= wait and (not self.squinting or now - self.started >= s["min_on"]):
             self._set(not self.squinting, s, now)
-
-class WinkDetector:
-    """Spots two quick winks of one eye. Returns True from update() on the second."""
-    def __init__(self, eye):
-        self.eye = eye           # 0 = left, 1 = right
-        self.shut_since = None
-        self.blinked = False     # the other eye closed too, so this isn't a wink
-        self.last_wink = -1e9
-
-    def update(self, eyes, now, s):
-        x, other = eyes[self.eye], eyes[1 - self.eye]
-        if x < s["wink_below"]:
-            if self.shut_since is None:
-                self.shut_since, self.blinked = now, False
-            if other < WINK_OTHER_MIN:
-                self.blinked = True
-            return False
-        # Reopening needs a little margin above the threshold so noise doesn't count.
-        if self.shut_since is None or x < s["wink_below"] + 0.15:
-            return False
-        length = now - self.shut_since
-        self.shut_since = None
-        if self.blinked or not 0.03 <= length <= s["wink_max"]:
-            return False
-        if now - self.last_wink <= s["wink_gap"]:
-            self.last_wink = -1e9
-            return True
-        self.last_wink = now
-        return False
 
 STATIC = {
     "/": ("tuner.html", "text/html; charset=utf-8"),
@@ -389,14 +333,14 @@ def main():
     log(f"watching for squints; app at http://127.0.0.1:{PORT}")
     skip = False
     for l, r in eyes.stream(log):
-        if not settings["enabled"] and not settings["double_wink"] and not app_open():
-            # Switched off, no double wink to switch it back on, and nobody's watching
-            # the bars: stop asking for eye data until something changes.
+        if not settings["enabled"] and not app_open():
+            # Switched off and nobody's watching the bars: stop asking for eye data
+            # until something changes.
             detector.reset(settings)
             log("SquintThru is off; eye tracking paused")
             while True:
                 wake.clear()
-                if settings["enabled"] or settings["double_wink"] or app_open():
+                if settings["enabled"] or app_open():
                     break
                 wake.wait()
             log("eye tracking resumed")
@@ -408,10 +352,6 @@ def main():
         live["l"], live["r"], live["eyes"] = l, r, True
         now = time.monotonic()
         s = settings
-        if s["double_wink"] and detector.double_winked(l, r, now, s):
-            s = change_settings(enabled=not s["enabled"])
-            log("double wink: squinting " + ("on" if s["enabled"] else "off"))
-            pt.tone(1 if s["enabled"] else 2)   # one tone for on, two for off
         if not s["enabled"]:
             detector.reset(s)   # also turns off passthrough that a squint turned on
             continue

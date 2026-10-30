@@ -95,23 +95,13 @@ To squint with your left eye instead, switch **Squint eye** in [Options](#option
 
 Eye frames arrive about every 17 ms. At Instant, the delay you feel comes down to that one frame plus Steam's own fade.
 
-### Double wink
-
-<img src="docs/double-wink.png" width="420" alt="Double wink turned on, with the wink eye set to Right and its timing sliders">
-
-Wink one eye twice quickly to turn squinting on or off, the same as the **On** box at the top. Use it to keep squints from switching passthrough during a game where you squint a lot, then turn squinting back on without taking off the headset. Choose which eye's winks count, how short a wink must be, how close together the two winks must be, and how shut the eye must be. Winks only count while the other eye stays open, so blinks never toggle it.
-
-You hear Steam's Room View tone to confirm: **once** when squinting turns on, **twice** when it turns off. It plays even with **Click sound** off. SquintThru learns the tone from the first Room View press after Steam starts, so if you double wink before your first squint, the switch still happens but you won't hear it.
-
-While double wink is on, a squint has to last longer than the longest wink before it counts, so squints get a little slower.
-
 ### Options
 
 <img src="docs/options.png" width="420" alt="Options: Mode Hold, Squint eye Right, Click sound off, Ignore blinks off, and Reset to defaults">
 
 - **Mode**: **Hold** keeps passthrough on while you squint. **Toggle** makes each squint switch it on or off.
 - **Squint eye**: the eye you squint with.
-- **Click sound**: plays Steam's button click each time passthrough switches. Off by default, so peeking is silent. The double wink tones play either way.
+- **Click sound**: plays Steam's button click each time passthrough switches. Off by default, so peeking is silent.
 - **Ignore blinks**: stops the start of a normal blink from flashing passthrough. Off by default, because when you squint hard, for example during a PCVR game, your other eye can close too and the guard undoes the squint. Turn it on if blinks flash passthrough.
 - **Reset to defaults**: puts every setting back to how it started.
 
@@ -147,7 +137,7 @@ SquintThru only does work when it has to:
 
 - **While you're using it**, it looks at each eye frame as it arrives, about 60 a second, because that's what makes it instant. The work per frame is about 2 µs: three calls to read the frame and ask for the next one, and a few comparisons. Nothing else runs in the background.
 - **It leaves Steam alone.** It only talks to Steam to switch passthrough. Checking whether the connection is still alive costs Steam nothing, because SquintThru just looks at its own socket every 30 seconds.
-- **Switched off**, with the **On** box unchecked, it stops reading your eyes entirely. It uses no CPU and never wakes up until you switch it back on. With **Double wink** on, it keeps reading your eyes while switched off, because that's how it sees the double wink that turns it back on, but it does nothing else.
+- **Switched off**, with the **On** box unchecked, it stops reading your eyes entirely. It uses no CPU and never wakes up until you switch it back on.
 - **When the headset is idle** and eye tracking stops sending frames, it waits 5 seconds at a time instead of 1. A new eye frame still wakes it instantly.
 - **The settings app** only runs while its window is visible. Hide or minimize the window and it goes quiet. Three seconds later, SquintThru also stops the extra work it does for the app, such as refreshing the passthrough state.
 
@@ -156,7 +146,7 @@ Measured with a simulated eye tracker at 60 frames a second, before and after th
 | Situation | Wakeups per second | Calls into Steam |
 |---|---|---|
 | Normal use, app closed | 62 → 58 (one per eye frame) | 30 a minute → none |
-| Switched off (double wink off) | 61 → **0** | 30 a minute → none |
+| Switched off | 61 → **0** | 30 a minute → none |
 | Headset idle (no eye frames) | 4 → **0.2** | 30 a minute → none |
 | Settings app open | about 115 (unchanged) | 30 a minute (unchanged) |
 
@@ -188,8 +178,6 @@ Settings are saved in `~/.config/squintthru/settings.json` and loaded every time
 | `min_on` | 20 ms | Once on, passthrough stays on at least this long (0–200 ms) |
 | `ignore_blinks` | off | Don't let the start of a blink count as a squint |
 | `click_sound` | off | Play Steam's button click each time passthrough switches |
-| `double_wink` | off | Two quick winks of `wink_eye` turn squinting on or off |
-| `wink_eye` / `wink_below` / `wink_max` / `wink_gap` | right / 0.35 / 0.4 s / 0.6 s | Double-wink tuning |
 
 ## How it works
 
@@ -209,8 +197,6 @@ Steam plays its button-click sound after every dashboard action. With **Click so
 2. Right after `button.click()`, the page helper calls `SuppressImminentNavSound()` on Steam's nav sound controller, which cancels the queued sound.
 3. That controller lives in a webpack module in the main Steam UI window (the bar overlay's `opener`). Webpack module ids change between Steam builds, so the helper doesn't use a fixed id. It pushes a dummy chunk into `webpackChunksteamui` to get webpack's `require`, then searches every module's source for `SuppressImminentNavSound(){`. It caches the controller it finds, so the search only runs once per Steam session.
 4. All of this is wrapped in `try/catch`. If a Steam update breaks it, switching still works and you just hear the click again.
-
-The double wink tone reuses the same controller. Steam's sound methods aren't documented, so SquintThru doesn't guess their names. While the Room View button is being pressed, it records which method on the controller gets called and with what arguments, then replays that exact call to play the tone. That also means it keeps working if Steam renames the method.
 
 ## Troubleshooting
 

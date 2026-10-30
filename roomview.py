@@ -8,11 +8,12 @@ import json, os, select, socket, sys, threading, urllib.request
 
 PORT = 8080
 
-# Installed into the bar page as window.__squint. It caches the Room View button
+# Installed into the bar page as window.__squint3 (bump the name when this changes:
+# the page outlives SquintThru, so an old helper stays installed). It caches the Room View button
 # and Steam's nav sound controller, and remembers a state it just asked for, so
 # a quick on-then-off never reads React's not-yet-updated props.
 HELPER = r"""
-window.__squint = (() => {
+window.__squint3 = (() => {
   const isRoomView = (a) => a?.invocation === 2 && a?.icon?.enum === 2 && a?.icon_active?.enum === 1;
   const actionOf = (button) => {
     const key = Object.keys(button).find((k) => k.startsWith("__reactFiber"));
@@ -43,46 +44,18 @@ window.__squint = (() => {
     return w.__squintNav;
   };
   const quiet = () => { try { nav().SuppressImminentNavSound(); } catch (e) {} };
-  // The Room View tone, for confirming a double wink. Steam's sound methods aren't
-  // documented, so instead of guessing, record which method (and arguments) the
-  // controller gets called with when the Room View button is pressed, and replay
-  // that exact call later. It's learned on the first press after Steam starts.
-  const listen = (n) => {
-    if (n.__squintRec) return;
-    n.__squintRec = { calls: null };
-    const names = new Set();
-    for (let o = n; o && o !== Object.prototype; o = Object.getPrototypeOf(o))
-      Object.getOwnPropertyNames(o).forEach((k) => names.add(k));
-    for (const k of names) {
-      if (k === "constructor" || k.startsWith("Suppress")) continue;
-      let d = null;
-      for (let o = n; o && !d; o = Object.getPrototypeOf(o)) d = Object.getOwnPropertyDescriptor(o, k);
-      const f = d && d.value;   // methods only; never trigger getters
-      if (typeof f !== "function") continue;
-      n[k] = function (...a) {
-        if (n.__squintRec.calls) n.__squintRec.calls.push([k, a]);
-        return f.apply(this, a);
-      };
-    }
-  };
-  const learnTone = (calls) => {
-    const pick = calls.find(([k]) => /sound|play/i.test(k)) || calls[0];
-    if (pick) opener.__squintTone = pick;
-  };
+  // Steam's active prop can lag a press by a second or more, and can match the
+  // wanted state by chance before going stale, so trust the press for the full window.
   let assumed = null, assumedAt = 0;
   const current = (b) => {
-    const actual = !!actionOf(b).active;
     if (assumed !== null) {
-      if (actual === assumed || performance.now() - assumedAt > 800) assumed = null;
-      else return assumed;
+      if (performance.now() - assumedAt < 2000) return assumed;
+      assumed = null;
     }
-    return actual;
+    return !!actionOf(b).active;
   };
   const press = (b, on, silent) => {
-    let n = null;
-    try { n = nav(); listen(n); n.__squintRec.calls = []; } catch (e) { n = null; }
     b.click();
-    if (n) { try { learnTone(n.__squintRec.calls); } catch (e) {} n.__squintRec.calls = null; }
     if (silent) quiet();
     assumed = on; assumedAt = performance.now();
   };
@@ -100,16 +73,6 @@ window.__squint = (() => {
       const was = current(b);
       press(b, !was, silent);
       return was ? "on" : "off";
-    },
-    // Plays the Room View tone `times` times. Returns "ok", or "unknown" if no
-    // press has happened since Steam started, so the tone isn't learned yet.
-    tone(times) {
-      const t = opener.__squintTone;
-      if (!t) return "unknown";
-      const n = nav();
-      const play = () => { try { n[t[0]](...t[1]); } catch (e) {} };
-      for (let i = 0; i < times; i++) setTimeout(play, 220 * i);
-      return "ok";
     },
   };
 })();
@@ -147,11 +110,6 @@ class RoomView:
     def flip(self, quiet=True):
         return self._helper(f"flip({'true' if quiet else 'false'})")
 
-    def tone(self, times=1):
-        """Plays Steam's Room View tone. Returns "ok", or "unknown" until the tone has
-        been learned from a Room View press since Steam started."""
-        return self._helper(f"tone({int(times)})")
-
     def check(self):
         """Makes sure there's a working connection, without sending Steam anything if there
         is one: a closed socket shows up as readable with no data. Reconnects if needed."""
@@ -181,7 +139,7 @@ class RoomView:
     # --- internals ---
     def _helper(self, call):
         # Page reloads (Steam UI restarts) drop the helper, so reinstall when it's gone.
-        expr = f"window.__squint ? window.__squint.{call} : 'nohelper'"
+        expr = f"window.__squint3 ? window.__squint3.{call} : 'nohelper'"
         with self.lock:
             for attempt in (0, 1):
                 try:
