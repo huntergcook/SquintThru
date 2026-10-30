@@ -109,7 +109,7 @@ While double wink is on, a squint has to last longer than the longest wink befor
 - **Mode**: **Hold** keeps passthrough on while you squint. **Toggle** makes each squint switch it on or off.
 - **Squint eye**: the eye you squint with. Calibration sets this for you.
 - **Click sound**: plays Steam's button click each time passthrough switches. Off by default, so peeking is silent.
-- **Ignore blinks**: stops the start of a normal blink from flashing passthrough. On by default. If real squints get missed, turn it off.
+- **Ignore blinks**: stops the start of a normal blink from flashing passthrough. Off by default, because when you squint hard, for example during a PCVR game, your other eye can close too and the guard undoes the squint. Turn it on if blinks flash passthrough.
 - **Reset to defaults**: puts every setting back to how it started.
 
 ### Commands
@@ -135,7 +135,7 @@ SquintThru acts on the first eye frame that counts as a squint, and switches Roo
 
 What's left is Steam's own Room View fade.
 
-Because switching is this fast, the start of a normal blink could flash passthrough. **Ignore blinks** watches both eyes. If they close together, it's a blink and it's ignored. If passthrough turned on and the other eye shuts within 120 ms, it was a blink after all, and SquintThru turns passthrough back off.
+Because switching is this fast, the start of a normal blink could flash passthrough. When it's on, **Ignore blinks** watches both eyes. If they close together, it's a blink and it's ignored. If passthrough turned on and the other eye shuts within 120 ms, it was a blink after all, and SquintThru turns passthrough back off.
 
 ## Settings file
 
@@ -152,7 +152,7 @@ Settings are saved in `~/.config/squintthru/settings.json` and loaded every time
 | `hold` | 0 (instant) | How long a squint must last before passthrough turns on |
 | `release_hold` | 0 (instant) | How long the eye must stay open before it turns off |
 | `min_on` | 20 ms | Once on, passthrough stays on at least this long (0–200 ms) |
-| `ignore_blinks` | on | Don't let the start of a blink count as a squint |
+| `ignore_blinks` | off | Don't let the start of a blink count as a squint |
 | `click_sound` | off | Play Steam's button click each time passthrough switches |
 | `double_wink` | off | Two quick winks of `wink_eye` switch passthrough |
 | `wink_eye` / `wink_below` / `wink_max` / `wink_gap` | right / 0.35 / 0.4 s / 0.6 s | Double-wink tuning |
@@ -183,6 +183,6 @@ Check the red message in the app, or run `squintthru log`.
 - **"Steam's debug port isn't open yet"**: restart your Steam Frame once after installing. See [Steam debugging](#steam-debugging).
 - **"SteamVR dashboard bar not found"**: start SteamVR. SquintThru keeps retrying.
 - **"waiting for eye tracking"**: eye tracking isn't running yet. SquintThru connects as soon as it is.
-- **Squinting does nothing**: if the app shows the "Passthrough is already on" warning, turn passthrough off with the green button. Otherwise, watch the **Squinting** chip while you squint and drag the lines in **Your eyes** until it lights up.
-- **Passthrough flashes when you blink**: make sure **Ignore blinks** is on, or raise the bottom of the green band on your other eye.
+- **Squinting does nothing**: if the app shows the "Passthrough is already on" warning, turn passthrough off with the green button. If the log says "that was a blink; undoing", turn off **Ignore blinks**. Otherwise, watch the **Squinting** chip while you squint and drag the lines in **Your eyes** until it lights up.
+- **Passthrough flashes when you blink**: turn on **Ignore blinks**, or raise the bottom of the green band on your other eye.
 - **The app opens in a browser tab, not its own window**: install a Chromium-based browser, such as Chromium from Flatpak.

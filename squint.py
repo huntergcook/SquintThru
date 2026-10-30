@@ -26,7 +26,7 @@ DEFAULTS = {
     "hold": 0.0,             # seconds a squint must last before acting; 0 = the first eye frame
     "release_hold": 0.0,     # seconds the eye must stay open before releasing
     "min_on": 0.02,          # passthrough stays on at least this long once triggered
-    "ignore_blinks": True,   # don't let the start of a blink count as a squint
+    "ignore_blinks": False,  # don't let the start of a blink count as a squint
     "click_sound": False,    # play Steam's button click when passthrough switches
     "double_wink": False,    # two quick winks of one eye toggle passthrough
     "wink_eye": "right",     # "left", "right" or "either"
