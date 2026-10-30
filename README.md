@@ -122,6 +122,7 @@ While double wink is on, a squint has to last longer than the longest wink befor
 | `squintthru status` | Check whether it's running |
 | `squintthru start` / `stop` / `restart` | Control the background service |
 | `squintthru log` | Watch the log: every squint, release and problem |
+| `squintthru stats` | Measure what SquintThru costs on your headset (see [Battery](#battery)) |
 | `squintthru uninstall` | Remove SquintThru |
 
 The app opens in its own window, with no tabs or address bar, when a Chromium-based browser is installed (Chromium, Chrome, Brave or Edge, including Flatpak versions). Otherwise it opens as a page in your default browser. If that browser offers "Install app", that turns the page into its own window too.
@@ -138,6 +139,36 @@ SquintThru acts on the first eye frame that counts as a squint, and switches Roo
 What's left is Steam's own Room View fade.
 
 Because switching is this fast, the start of a normal blink could flash passthrough. When it's on, **Ignore blinks** watches both eyes. If they close together, it's a blink and it's ignored. If passthrough turned on and the other eye shuts within 120 ms, it was a blink after all, and SquintThru turns passthrough back off.
+
+## Battery
+
+SquintThru only does work when it has to:
+
+- **While you're using it**, it looks at each eye frame as it arrives, about 60 a second, because that's what makes it instant. The work per frame is about 2 µs: three calls to read the frame and ask for the next one, and a few comparisons. Nothing else runs in the background.
+- **It leaves Steam alone.** It only talks to Steam to switch passthrough. Checking whether the connection is still alive costs Steam nothing, because SquintThru just looks at its own socket every 30 seconds.
+- **Switched off**, with the **On** box unchecked, it stops reading your eyes entirely. It uses no CPU and never wakes up until you switch it back on.
+- **When the headset is idle** and eye tracking stops sending frames, it waits 5 seconds at a time instead of 1. A new eye frame still wakes it instantly.
+- **The settings app** only runs while its window is visible. Hide or minimize the window and it goes quiet. Three seconds later, SquintThru also stops the extra work it does for the app, such as refreshing the passthrough state.
+
+Measured with a simulated eye tracker at 60 frames a second, before and after these changes:
+
+| Situation | Wakeups per second | Calls into Steam |
+|---|---|---|
+| Normal use, app closed | 62 → 58 (one per eye frame) | 30 a minute → none |
+| Switched off | 61 → **0** | 30 a minute → none |
+| Headset idle (no eye frames) | 4 → **0.2** | 30 a minute → none |
+| Settings app open | about 115 (unchanged) | 30 a minute (unchanged) |
+
+### Measuring it on your headset
+
+The numbers above come from a computer, not a Steam Frame, so check them on yours:
+
+```sh
+squintthru stats             # a 10-second snapshot
+squintthru stats --compare   # about 2 minutes: alternates SquintThru on and off
+```
+
+`stats` shows SquintThru's CPU use and wakeups, the eye-tracking process's CPU use, and the battery draw if the system reports it. `--compare` turns SquintThru off for half the time, so you can see the difference it makes. That includes whether asking for eye data makes eye tracking itself work harder, which can't be measured off the headset. Keep still in one scene while it runs. The headset's own power use changes from second to second by more than SquintThru's does.
 
 ## Settings file
 

@@ -378,11 +378,17 @@ function render(live) {
   $("speedChip").textContent = live.latency_ms == null ? "– ms" : live.latency_ms + " ms";
   $("problem").hidden = !live.problem;
   $("problem").textContent = live.problem || "";
-  $("log").innerHTML = live.events.map((e) => `<li>${e.replace(/</g, "&lt;")}</li>`).join("");
+  const logHTML = live.events.map((e) => `<li>${e.replace(/</g, "&lt;")}</li>`).join("");
+  if (logHTML !== lastLog) $("log").innerHTML = lastLog = logHTML;
   renderCalib(live.calib);
 }
 
+// Poll only while the window is visible. When it's hidden or minimized, the page goes
+// quiet, and after a few seconds SquintThru stops the extra work it does for the app.
+let pollTimer = null, lastLog = "";
 async function poll() {
+  pollTimer = null;
+  if (document.hidden) return;
   try {
     const live = await (await fetch("/state")).json();
     // Don't let a poll overwrite a slider the user is still dragging.
@@ -390,8 +396,11 @@ async function poll() {
     $("err").hidden = true;
     render(live);
   } catch { $("err").hidden = false; }
-  setTimeout(poll, 70);
+  if (!document.hidden && !pollTimer) pollTimer = setTimeout(poll, 70);
 }
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && !pollTimer) poll();
+});
 poll();
 </script>
 </body>

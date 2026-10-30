@@ -73,6 +73,17 @@ settings = load_settings()
 live = {"l": 0.0, "r": 0.0, "squinting": False, "passthrough": None, "latency_ms": None,
         "eyes": False, "problem": "", "ours": False}
 events = deque(maxlen=12)
+
+# Power: the app page polls /state every 70 ms while it's visible. When it hasn't
+# for APP_TIMEOUT seconds, nobody is looking, so SquintThru stops refreshing the
+# passthrough state from Steam, and stops reading eyes entirely if it's switched off.
+APP_TIMEOUT = 3.0
+KEEPALIVE = 30.0           # with the app closed, check the Steam connection this often
+app = {"seen": -1e9}       # last time the app page asked for /state
+wake = threading.Event()   # set when settings change or the app opens
+
+def app_open():
+    return time.monotonic() - app["seen"] < APP_TIMEOUT
 calib = {"phase": None, "start": 0.0, "until": 0.0, "samples": {"open": [], "squint": []}, "message": ""}
 
 def log(*a):
@@ -82,7 +93,8 @@ def log(*a):
 
 class Passthrough:
     """Applies only the latest wanted state, so quick repeat squints never queue up.
-    Each change is one round trip to Steam; the state is re-read every 2 s when idle."""
+    Each change is one round trip to Steam. While the app is open, the state is re-read
+    every 2 s for display; otherwise Steam is left alone apart from a free connection check."""
     def __init__(self, rv):
         self.rv = rv
         self.want = None   # hold mode: True/False
@@ -102,6 +114,10 @@ class Passthrough:
         with self.cv:
             self.flips += 1
             self.asked = at or time.monotonic()
+            self.cv.notify()
+
+    def app_opened(self):
+        with self.cv:
             self.cv.notify()
 
     def _apply(self, want, flips):
@@ -131,12 +147,16 @@ class Passthrough:
         while True:
             with self.cv:
                 if self.want is None and not self.flips:
-                    self.cv.wait(timeout=2)
+                    self.cv.wait(timeout=2 if app_open() else KEEPALIVE)
                 want, flips, asked = self.want, self.flips, self.asked
                 self.want, self.flips, self.asked = None, 0, None
             try:
                 if want is None and not flips:
-                    state = self.rv.state()   # idle: refresh the page and keep the connection warm
+                    if app_open():
+                        state = self.rv.state()   # refresh what the app shows
+                    else:
+                        state = None
+                        self.rv.check()           # reconnect if Steam restarted, without waking Steam
                 else:
                     state = self._apply(want, flips)
                     if asked is not None:
@@ -325,6 +345,12 @@ class Handler(BaseHTTPRequestHandler):
             with open(os.path.join(HERE, name), "rb") as f:
                 self._send(f.read(), ctype)
         elif path == "/state":
+            was_open = app_open()
+            app["seen"] = time.monotonic()
+            if not was_open:
+                wake.set()          # resume eye reading if it was paused
+                if pt:
+                    pt.app_opened() # show the current passthrough state right away
             total = CALIB_SETTLE + CALIB_SECONDS
             left = max(0.0, calib["until"] - time.monotonic()) if calib["phase"] else 0.0
             self._send(json.dumps({**live, "settings": settings, "defaults": DEFAULTS,
@@ -376,6 +402,7 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 calib["phase"] = None
                 calib["message"] = ""
+        wake.set()
         self._send(b"{}")
 
 pt = None
@@ -387,7 +414,9 @@ def main():
         server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     except OSError:
         sys.exit(f"port {PORT} is in use; SquintThru is probably already running (squintthru status)")
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    # The default 0.5 s poll interval only matters for shutdown(), which never happens here;
+    # requests still wake the server instantly. A long interval saves 2 wakeups a second.
+    threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 3600}, daemon=True).start()
     rv = roomview.RoomView()
     pt = Passthrough(rv)
     try:
@@ -396,7 +425,24 @@ def main():
         log("room view:", e)
     detector = Detector(pt)
     log(f"watching for squints; app at http://127.0.0.1:{PORT}")
+    skip = False
     for l, r in eyes.stream(log):
+        if not settings["enabled"] and not app_open():
+            # Switched off and nobody's watching the bars: stop asking for eye data
+            # until it's switched back on or the app opens.
+            detector.reset(settings)
+            log("SquintThru is off; eye tracking paused")
+            while True:
+                wake.clear()
+                if settings["enabled"] or app_open():
+                    break
+                wake.wait()
+            log("eye tracking resumed")
+            skip = True     # the sample waiting for us may be from before the pause
+            continue
+        if skip:
+            skip = False
+            continue
         live["l"], live["r"], live["eyes"] = l, r, True
         now = time.monotonic()
         if calib["phase"]:

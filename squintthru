@@ -3,6 +3,7 @@
 #   squintthru            open the app window (starts the service if needed)
 #   squintthru start|stop|restart|status
 #   squintthru log        follow the service log
+#   squintthru stats [--compare]   measure SquintThru's CPU, wakeups and battery cost
 #   squintthru uninstall
 set -euo pipefail
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
@@ -52,6 +53,7 @@ case "${1:-open}" in
   restart)   systemctl --user restart "$UNIT" ;;
   status)    if running; then echo "running at $URL"; else echo "not running"; exit 1; fi ;;
   log)       journalctl --user -u "$UNIT" -f -n 50 ;;
+  stats)     shift; exec python3 "$HERE/stats.py" "$@" ;;
   uninstall) exec "$HERE/install.sh" --uninstall ;;
   *)         sed -n '2,7p' "$0"; exit 2 ;;
 esac

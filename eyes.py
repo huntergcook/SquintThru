@@ -10,21 +10,19 @@ OPENNESS = 0x157 + 0x79          # two floats: left, right
 EOWNERDEAD = 130
 FUTEX_WAIT = 0
 SYS_FUTEX = {"x86_64": 202, "amd64": 202, "aarch64": 98, "arm64": 98}
-STALE_AFTER = 3.0                # no new sample for this long: reopen the eye server
+STALE_AFTER = 3.0                # no new sample for this long: check whether the eye server restarted
+WAIT = 1.0                       # longest wait for a sample while eye tracking is running
+WAIT_IDLE = 5.0                  # ...and once it has gone quiet (standby), so we wake up less
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 class _timespec(ctypes.Structure):
     _fields_ = [("tv_sec", ctypes.c_long), ("tv_nsec", ctypes.c_long)]
 
-def _libc():
-    libc = ctypes.CDLL(ctypes.util.find_library("c") or "libc.so.6", use_errno=True)
-    consistent = getattr(libc, "pthread_mutex_consistent", None)
-    if consistent is None:  # glibc before 2.34 keeps it in libpthread
-        consistent = ctypes.CDLL(ctypes.util.find_library("pthread") or "libpthread.so.0").pthread_mutex_consistent
-    return libc, consistent
-
 class EyeServer:
-    """One open eye-server mapping. read() blocks for the next sample (up to 1 s)."""
+    """One open eye-server mapping. read() blocks until the next sample arrives.
+
+    Runs ~60 times a second, so each frame is kept to three calls into libc:
+    wait for the sample, then lock, read it, ask for the next one, unlock."""
     def __init__(self, path=SHM):
         nr = SYS_FUTEX.get(platform.machine().lower())
         if nr is None:
@@ -40,30 +38,45 @@ class EyeServer:
         self.path, self.nr = path, nr
         self._anchor = ctypes.c_char.from_buffer(self.mm)
         base = ctypes.addressof(self._anchor)
-        self.mutex = ctypes.c_void_p(base + MUTEX)
-        self.seq_addr = ctypes.c_void_p(base + SEQ)
+        self.mutex, self.seq_addr = base + MUTEX, base + SEQ
         self.seq = ctypes.c_uint32.from_address(base + SEQ)
         self.req = ctypes.c_uint32.from_address(base + REQ)
-        self.libc, self.consistent = _libc()
-        self.timeout = _timespec(1, 0)
+        # Plain handle (no errno bookkeeping) with fixed argument types, so calls don't build objects.
+        libc = ctypes.CDLL(ctypes.util.find_library("c") or "libc.so.6")
+        vp = ctypes.c_void_p
+        self._lock_fn, self._unlock_fn = libc.pthread_mutex_lock, libc.pthread_mutex_unlock
+        for f in (self._lock_fn, self._unlock_fn):
+            f.argtypes, f.restype = [vp], ctypes.c_int
+        self._consistent = getattr(libc, "pthread_mutex_consistent", None)
+        if self._consistent is None:  # glibc before 2.34 keeps it in libpthread
+            self._consistent = ctypes.CDLL(ctypes.util.find_library("pthread") or "libpthread.so.0").pthread_mutex_consistent
+        self._consistent.argtypes = [vp]
+        self._futex = libc.syscall
+        self._futex.argtypes = [ctypes.c_long, vp, ctypes.c_long, ctypes.c_uint32, vp, vp, ctypes.c_long]
+        self._futex.restype = ctypes.c_long
+        self._timeouts = {t: _timespec(int(t), int(t % 1 * 1e9)) for t in (WAIT, WAIT_IDLE)}
+        self._timeout_ptrs = {t: ctypes.addressof(ts) for t, ts in self._timeouts.items()}
+        self._lock()
+        self.last = self.seq.value
+        self.req.value = 1               # ask for the first sample
+        self._unlock_fn(self.mutex)
 
     def _lock(self):
-        if self.libc.pthread_mutex_lock(self.mutex) == EOWNERDEAD:
-            self.consistent(self.mutex)
+        if self._lock_fn(self.mutex) == EOWNERDEAD:
+            self._consistent(self.mutex)
 
-    def read(self):
-        """Returns (left, right), or None if the eye server sent nothing new in time."""
+    def read(self, wait=WAIT):
+        """Returns (left, right), or None if nothing new arrived (a timeout, or a wakeup
+        without a new sample). A request for the next sample is always left pending."""
+        self._futex(self.nr, self.seq_addr, FUTEX_WAIT, self.last, self._timeout_ptrs[wait], None, 0)
+        if self.seq.value == self.last:
+            return None
         self._lock()
-        s = self.seq.value
-        self.req.value = 1
-        self.libc.pthread_mutex_unlock(self.mutex)
-        self.libc.syscall(ctypes.c_long(self.nr), self.seq_addr, ctypes.c_long(FUTEX_WAIT),
-                          ctypes.c_long(s), ctypes.byref(self.timeout), ctypes.c_void_p(0), ctypes.c_long(0))
-        self._lock()
-        l, r = struct.unpack_from("<2f", self.mm, OPENNESS)
-        s2 = self.seq.value
-        self.libc.pthread_mutex_unlock(self.mutex)
-        return (l, r) if s2 != s else None
+        sample = struct.unpack_from("<2f", self.mm, OPENNESS)
+        self.last = self.seq.value
+        self.req.value = 1               # ask for the next one now, so it's ready the moment it exists
+        self._unlock_fn(self.mutex)
+        return sample
 
     def replaced(self):
         try:
@@ -100,15 +113,22 @@ def stream(log=print, path=SHM):
                 raise RuntimeError("eyestream exited")
             eye = EyeServer(path)
             say("eye tracking connected")
-            last = time.monotonic()
+            wait, quiet_since = WAIT, None
             while True:
-                sample = eye.read()
-                now = time.monotonic()
+                sample = eye.read(wait)
                 if sample is not None:
-                    last = now
+                    if quiet_since is not None:
+                        wait, quiet_since = WAIT, None
                     yield sample
-                elif now - last > STALE_AFTER and eye.replaced():
-                    raise RuntimeError("eye server restarted")
+                    continue
+                # Nothing new: only now look at the clock, so the per-frame path stays cheap.
+                now = time.monotonic()
+                if quiet_since is None:
+                    quiet_since = now
+                elif now - quiet_since > STALE_AFTER:
+                    if eye.replaced():
+                        raise RuntimeError("eye server restarted")
+                    wait = WAIT_IDLE   # headset idle: a new sample still wakes us instantly
         except FileNotFoundError:
             say("waiting for eye tracking (is SteamVR running?)")
         except PermissionError as e:

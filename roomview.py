@@ -4,7 +4,7 @@
 # Built for speed: one websocket to the bar page stays open, a small helper is
 # installed in the page once, and each change is a single Runtime.evaluate
 # round trip that both checks the state and clicks.
-import json, os, socket, sys, threading, urllib.request
+import json, os, select, socket, sys, threading, urllib.request
 
 PORT = 8080
 
@@ -109,6 +109,22 @@ class RoomView:
 
     def flip(self, quiet=True):
         return self._helper(f"flip({'true' if quiet else 'false'})")
+
+    def check(self):
+        """Makes sure there's a working connection, without sending Steam anything if there
+        is one: a closed socket shows up as readable with no data. Reconnects if needed."""
+        with self.lock:
+            if self.sock:
+                try:
+                    readable = select.select([self.sock], [], [], 0)[0]
+                    if not readable or self.sock.recv(1, socket.MSG_PEEK | socket.MSG_DONTWAIT):
+                        return   # still connected (any unread message is skipped by _evaluate)
+                except BlockingIOError:
+                    return
+                except OSError:
+                    pass
+                self.close()
+        self.state()   # connect, install the helper, and read the state
 
     def connect(self):
         """Opens the connection and installs the helper ahead of time, so the first squint is fast."""
