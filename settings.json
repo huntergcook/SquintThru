@@ -2,11 +2,13 @@
   "enabled": true,
   "mode": "hold",
   "squint_eye": "right",
-  "squint_below": 0.79,
-  "other_min": 0.0,
-  "other_max": 0.93,
-  "release_above": 0.9,
-  "hold": 0.001,
-  "release_hold": 0.001,
-  "min_on": 0.02
+  "squint_below": 0.77,
+  "other_min": 0.1,
+  "other_max": 0.85,
+  "release_above": 0.79,
+  "hold": 0.01,
+  "release_hold": 0.0,
+  "min_on": 0.005,
+  "ignore_blinks": false,
+  "click_sound": true
 }

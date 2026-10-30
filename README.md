@@ -101,7 +101,7 @@ Eye frames arrive about every 17 ms. At Instant, the delay you feel comes down t
 
 - **Mode**: **Hold** keeps passthrough on while you squint. **Toggle** makes each squint switch it on or off.
 - **Squint eye**: the eye you squint with.
-- **Click sound**: plays Steam's button click each time passthrough switches. Off by default, so peeking is silent.
+- **Click sound**: plays Steam's button click each time passthrough switches. On by default. Turn it off for silent peeking.
 - **Ignore blinks**: stops the start of a normal blink from flashing passthrough. Off by default, because when you squint hard, for example during a PCVR game, your other eye can close too and the guard undoes the squint. Turn it on if blinks flash passthrough.
 - **Reset to defaults**: puts every setting back to how it started.
 
@@ -123,7 +123,7 @@ The app opens in its own window, with no tabs or address bar, when a Chromium-ba
 SquintThru acts on the first eye frame that counts as a squint, and switches Room View with one message to Steam:
 
 - **Eye data is read in-process** from the eye server's shared memory (`eyes.py`), right as each frame arrives, about every 17 ms.
-- **Squint for and Open for default to Instant.** Nothing waits for a second frame.
+- **Open for defaults to Instant, and Squint for to 10 ms.** Set Squint for to Instant and nothing waits for a second frame.
 - **One persistent connection to Steam.** A small helper is installed in the dashboard page once. Each switch is a single round trip that checks the state and presses the button, about 1 ms, instead of opening new connections and polling to confirm.
 - **The connection is warmed up at start** and kept alive, so the first squint is as fast as the rest.
 
@@ -170,14 +170,14 @@ Settings are saved in `~/.config/squintthru/settings.json` and loaded every time
 | `enabled` | on | The **On** switch |
 | `mode` | `hold` | `hold`: on while squinting. `toggle`: each squint switches it. |
 | `squint_eye` | `right` | The eye that nearly shuts when you squint |
-| `squint_below` | 0.79 | The squint eye must be below this... |
-| `other_min` / `other_max` | 0.0 / 0.93 | ...while the other eye is in this band |
-| `release_above` | 0.9 | The squint eye above this counts as open again |
-| `hold` | 0 (instant) | How long a squint must last before passthrough turns on |
+| `squint_below` | 0.77 | The squint eye must be below this... |
+| `other_min` / `other_max` | 0.1 / 0.85 | ...while the other eye is in this band |
+| `release_above` | 0.79 | The squint eye above this counts as open again |
+| `hold` | 10 ms | How long a squint must last before passthrough turns on |
 | `release_hold` | 0 (instant) | How long the eye must stay open before it turns off |
-| `min_on` | 20 ms | Once on, passthrough stays on at least this long (0–200 ms) |
+| `min_on` | 5 ms | Once on, passthrough stays on at least this long (0–200 ms) |
 | `ignore_blinks` | off | Don't let the start of a blink count as a squint |
-| `click_sound` | off | Play Steam's button click each time passthrough switches |
+| `click_sound` | on | Play Steam's button click each time passthrough switches |
 
 ## How it works
 

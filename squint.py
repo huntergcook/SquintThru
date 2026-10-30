@@ -17,15 +17,15 @@ DEFAULTS = {
     "enabled": True,
     "mode": "hold",          # "hold": on while squinting; "toggle": each squint flips it
     "squint_eye": "right",   # the eye that nearly shuts when you squint
-    "squint_below": 0.79,    # squint eye below this...
-    "other_min": 0.0,        # ...while the other eye is in this band
-    "other_max": 0.93,
-    "release_above": 0.9,    # squint eye above this counts as "stopped squinting"
-    "hold": 0.0,             # seconds a squint must last before acting; 0 = the first eye frame
+    "squint_below": 0.77,    # squint eye below this...
+    "other_min": 0.1,        # ...while the other eye is in this band
+    "other_max": 0.85,
+    "release_above": 0.79,   # squint eye above this counts as "stopped squinting"
+    "hold": 0.01,            # seconds a squint must last before acting; 0 = the first eye frame
     "release_hold": 0.0,     # seconds the eye must stay open before releasing
-    "min_on": 0.02,          # passthrough stays on at least this long once triggered
+    "min_on": 0.005,         # passthrough stays on at least this long once triggered
     "ignore_blinks": False,  # don't let the start of a blink count as a squint
-    "click_sound": False,    # play Steam's button click when passthrough switches
+    "click_sound": True,     # play Steam's button click when passthrough switches
 }
 
 # Blink guard. In a blink both eyes close together; in a squint the other eye
