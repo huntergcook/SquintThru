@@ -2,6 +2,8 @@
 
 Squint to see your room. SquintThru turns on Steam Frame passthrough (Room View) the moment you squint one eye, and turns it back off when you open it again. Grab your drink, check on the cat, find your controller, then get straight back to the game. It runs on the Steam Frame itself.
 
+<p align="center"><img src="docs/demo.gif" width="480" alt="Squinting in the headset: the view switches between the SquintThru app on the desktop, No Man's Sky, and the real room"></p>
+
 <p align="center"><img src="docs/app.png" width="420" alt="The SquintThru app mid-squint: the right eye is nearly shut, passthrough is on, and the last switch took 1.2 ms"></p>
 
 ## Install
