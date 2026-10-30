@@ -9,16 +9,25 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 URL="http://127.0.0.1:8765"
 UNIT="squintthru.service"
+LOG="$HERE/squint.log"
+# The background service runs under your user's systemd. Shells that don't carry the
+# desktop session's environment can't reach it ("Failed to connect to user scope bus"),
+# so point them at the session the usual way before giving up on it.
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+if [[ -z "${DBUS_SESSION_BUS_ADDRESS:-}" && -S "$XDG_RUNTIME_DIR/bus" ]]; then
+  export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+fi
+has_service() { systemctl --user cat "$UNIT" >/dev/null 2>&1; }
 
 running() { python3 -c "import urllib.request; urllib.request.urlopen('$URL/state', timeout=1)" 2>/dev/null; }
 
 ensure_running() {
   running && return 0
-  if systemctl --user cat "$UNIT" >/dev/null 2>&1; then
+  if has_service; then
     systemctl --user start "$UNIT"
   else
     # Not installed as a service: run it in the background from here.
-    nohup python3 -u "$HERE/squint.py" >>"$HERE/squint.log" 2>&1 &
+    nohup python3 -u "$HERE/squint.py" >>"$LOG" 2>&1 &
   fi
   for _ in $(seq 30); do running && return 0; sleep 0.1; done
   echo "SquintThru didn't start. See: squintthru log" >&2
@@ -49,10 +58,11 @@ open_window() {
 case "${1:-open}" in
   open)      ensure_running && open_window ;;
   start)     ensure_running && echo "SquintThru is running." ;;
-  stop)      systemctl --user stop "$UNIT" 2>/dev/null || pkill -f "python3 -u $HERE/squint.py" || true ;;
-  restart)   systemctl --user restart "$UNIT" ;;
+  stop)      if has_service; then systemctl --user stop "$UNIT"; fi
+             pkill -f "python3 -u $HERE/squint.py" || true ;;
+  restart)   if has_service; then systemctl --user restart "$UNIT"; else "$0" stop; sleep 0.5; ensure_running; fi ;;
   status)    if running; then echo "running at $URL"; else echo "not running"; exit 1; fi ;;
-  log)       journalctl --user -u "$UNIT" -f -n 50 ;;
+  log)       if has_service; then journalctl --user -u "$UNIT" -f -n 50; else tail -n 50 -f "$LOG"; fi ;;
   stats)     shift; exec python3 "$HERE/stats.py" "$@" ;;
   uninstall) exec "$HERE/install.sh" --uninstall ;;
   *)         sed -n '2,7p' "$0"; exit 2 ;;
