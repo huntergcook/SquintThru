@@ -182,6 +182,7 @@ Steam plays its button-click sound after every dashboard action. With **Click so
 
 Check the red message in the app, or run `squintthru log`.
 
+- **"Failed to connect to user scope bus" while installing**: make sure you're not using `sudo`. Run the install command as your normal user in a terminal on the Frame's desktop. Then run the same command again: the installer now finds your session by itself, and if it still can't reach systemd, it starts SquintThru at desktop login instead.
 - **"Steam's debug port isn't open yet"**: restart your Steam Frame once after installing. See [Steam debugging](#steam-debugging).
 - **"SteamVR dashboard bar not found"**: start SteamVR. SquintThru keeps retrying.
 - **"waiting for eye tracking"**: eye tracking isn't running yet. SquintThru connects as soon as it is.

@@ -9,6 +9,12 @@
 #   ./install.sh --uninstall   remove it (your settings are kept)
 set -euo pipefail
 
+if [[ $EUID -eq 0 ]]; then
+  echo "Run this as your normal user, without sudo. SquintThru installs into your own home folder" >&2
+  echo "and runs as you, so it can see Steam and the eye tracker." >&2
+  exit 1
+fi
+
 # Run through curl | bash, there's no checkout next to this script: fetch one
 # into ~/.local/share/squintthru/app and run its installer. The braces make bash
 # read this whole block before running it, so a cut-off download does nothing.
@@ -55,11 +61,23 @@ BIN="$HOME/.local/bin"
 CEF_FLAG=".cef-enable-remote-debugging"
 STEAM_DIRS=("$HOME/.local/share/Steam" "$HOME/.steam/steam")
 
+AUTOSTART="${XDG_CONFIG_HOME:-$HOME/.config}/autostart/squintthru.desktop"
+
 say() { printf '\033[1m%s\033[0m\n' "$*"; }
+
+# The background service runs under your user's systemd. Shells that don't carry the
+# desktop session's environment can't reach it ("Failed to connect to user scope bus"),
+# so point them at the session the usual way before giving up on it.
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+if [[ -z "${DBUS_SESSION_BUS_ADDRESS:-}" && -S "$XDG_RUNTIME_DIR/bus" ]]; then
+  export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+fi
+user_systemd() { systemctl --user show-environment >/dev/null 2>&1; }
 
 if [[ "${1:-}" == "--uninstall" ]]; then
   systemctl --user disable --now "$UNIT" 2>/dev/null || true
-  rm -f "$UNIT_DIR/$UNIT" "$APPS/squintthru.desktop" "$BIN/squintthru"
+  pkill -f "python3 -u $HERE/squint.py" 2>/dev/null || true
+  rm -f "$UNIT_DIR/$UNIT" "$APPS/squintthru.desktop" "$BIN/squintthru" "$AUTOSTART"
   systemctl --user daemon-reload 2>/dev/null || true
   say "SquintThru removed."
   echo "Settings are still in ~/.config/squintthru. Steam debugging is still on;"
@@ -96,7 +114,12 @@ fi
 pkill -f "python3 -u squint.py" 2>/dev/null || true
 pkill -f "python3 -u $HERE/squint.py" 2>/dev/null || true
 
-mkdir -p "$UNIT_DIR" "$APPS" "$BIN"
+mkdir -p "$APPS" "$BIN"
+
+if user_systemd; then
+use_systemd=1
+rm -f "$AUTOSTART"
+mkdir -p "$UNIT_DIR"
 cat >"$UNIT_DIR/$UNIT" <<EOF
 [Unit]
 Description=SquintThru: squint to see your room
@@ -111,6 +134,22 @@ RestartSec=2
 [Install]
 WantedBy=default.target
 EOF
+else
+# No reachable systemd user session: start SquintThru when you log in to the desktop instead.
+use_systemd=0
+mkdir -p "$(dirname "$AUTOSTART")"
+cat >"$AUTOSTART" <<EOF
+[Desktop Entry]
+Type=Application
+Name=SquintThru service
+Comment=Starts SquintThru in the background
+Exec="$HERE/squintthru" start
+Icon=$HERE/icon.svg
+Terminal=false
+NoDisplay=true
+X-KDE-autostart-phase=2
+EOF
+fi
 
 cat >"$APPS/squintthru.desktop" <<EOF
 [Desktop Entry]
@@ -127,9 +166,13 @@ command -v update-desktop-database >/dev/null && update-desktop-database "$APPS"
 
 ln -sf "$HERE/squintthru" "$BIN/squintthru"
 
-systemctl --user daemon-reload
-systemctl --user enable "$UNIT" >/dev/null 2>&1
-systemctl --user restart "$UNIT"
+if [[ $use_systemd == 1 ]]; then
+  systemctl --user daemon-reload
+  systemctl --user enable "$UNIT" >/dev/null 2>&1
+  systemctl --user restart "$UNIT"
+else
+  "$HERE/squintthru" start >/dev/null
+fi
 
 say "SquintThru is installed and running."
 # Show the app right away when there's a screen to show it on.
@@ -138,7 +181,12 @@ if [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]]; then
 fi
 echo "  Open the app:   SquintThru in your app menu, or run: squintthru"
 echo "  Update later:   run the same install command again"
-echo "  It starts by itself whenever you log in."
+if [[ $use_systemd == 1 ]]; then
+  echo "  It starts by itself whenever you log in."
+else
+  echo "  It starts by itself when you log in to the desktop. (This terminal couldn't reach"
+  echo "  systemd, so it uses desktop autostart instead.) If it isn't running, run: squintthru start"
+fi
 [[ ":$PATH:" == *":$BIN:"* ]] || echo "  (Add $BIN to your PATH to use the squintthru command.)"
 if [[ $restart_steam == 1 ]]; then
   say "One last step: restart your Steam Frame once. After that, SquintThru starts by itself."
